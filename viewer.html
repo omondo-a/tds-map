@@ -561,43 +561,52 @@
       border-top-right-radius: 20px;
       border-right: none;
       box-shadow: 0 -6px 24px rgba(0, 0, 0, 0.12);
-      transform: translateY(calc(100% - 80px));
+      transform: translateY(calc(100% - 96px));
       transition: transform 0.32s cubic-bezier(0.32, 0.72, 0, 1);
-      touch-action: none;
     }
     #sidebar.snap-half { transform: translateY(50vh); }
     #sidebar.snap-full { transform: translateY(0); }
+    #sidebar.detail-open { transform: translateY(100%); }   /* 詳情面板開啟時整個藏起來 */
     #sidebar.dragging { transition: none; }
     body.no-select #sidebar,
     body.no-select { user-select: none; }
 
     .sheet-drag-handle {
       display: block;
-      padding: 8px 0 6px;
+      padding: 14px 0 10px;   /* 加大觸控區 */
       cursor: grab;
       touch-action: none;
       flex-shrink: 0;
+      background: var(--panel);
+      border-top-left-radius: 20px;
+      border-top-right-radius: 20px;
+      position: relative;
+      z-index: 2;
     }
     .sheet-drag-handle::before {
       content: '';
       display: block;
       margin: 0 auto;
-      width: 40px; height: 4px;
+      width: 48px; height: 5px;
       background: var(--border-strong);
-      border-radius: 2px;
+      border-radius: 3px;
     }
+    .sheet-drag-handle:active::before { background: var(--muted); }
     .sheet-drag-handle:active { cursor: grabbing; }
 
     #sidebar header { padding: 4px 18px 12px; background: var(--panel); }
     #sidebar #controls { padding: 10px 18px; }
-    #sidebar #list-container { touch-action: pan-y; }
+    #sidebar #list-container { touch-action: pan-y; -webkit-overflow-scrolling: touch; }
+
+    /* 詳情面板開啟時, 側邊欄整個藏起, 移除地圖底部 padding */
+    #map-container.sheet-open { padding-bottom: 0; }
 
     #mobile-toggle, #sidebar-backdrop { display: none; }
 
-    /* 地圖填滿螢幕，底部 80px 讓給 sheet peek */
-    #map-container { padding-bottom: 80px; }
+    /* 地圖填滿螢幕，底部 96px 讓給 sheet peek */
+    #map-container { padding-bottom: 96px; }
     #status { top: 12px; right: 12px; left: 12px; max-width: none; font-size: 11px; padding: 6px 10px; }
-    #legend { bottom: 92px; right: 12px; font-size: 10px; padding: 8px 10px; max-width: 150px; }
+    #legend { bottom: 108px; right: 12px; font-size: 10px; padding: 8px 10px; max-width: 150px; }
     #legend .legend-icon { width: 20px; height: 20px; }
     #legend .legend-icon svg { width: 12px; height: 12px; }
     /* 面板開啟時把圖例往上推 */
@@ -1407,8 +1416,10 @@ function showDetailSheet(item) {
   sheet.classList.add('show');
   document.getElementById('map-container').classList.add('sheet-open');
   STATE.selectedId = item.id;
-  // 手機上把清單面板收到 peek，避免和詳情面板衝突
-  if (isMobileView && isMobileView()) setSheetSnap('peek');
+  // 手機上整個藏起清單面板，避免和詳情面板重疊
+  if (isMobileView && isMobileView()) {
+    document.getElementById('sidebar').classList.add('detail-open');
+  }
   // 面板出現後重新計算地圖尺寸並平移到 marker 使其保持可見
   setTimeout(() => {
     if (!STATE.map) return;
@@ -1422,6 +1433,9 @@ function hideDetailSheet() {
   const sheet = document.getElementById('detail-sheet');
   sheet.classList.remove('show');
   document.getElementById('map-container').classList.remove('sheet-open');
+  // 手機上把清單面板恢復到 peek
+  const sidebar = document.getElementById('sidebar');
+  if (sidebar) sidebar.classList.remove('detail-open');
   setTimeout(() => { if (STATE.map) STATE.map.invalidateSize({ animate: false }); }, 300);
 }
 
@@ -2505,7 +2519,7 @@ function initBottomSheet() {
 
   const snapPositions = () => {
     const vh = window.innerHeight;
-    return { peek: vh - 80, half: vh * 0.5, full: vh * 0.1 };
+    return { peek: vh - 96, half: vh * 0.5, full: vh * 0.1 };
   };
   const nearest = (currentTop) => {
     const p = snapPositions();
@@ -2537,7 +2551,7 @@ function initBottomSheet() {
     const dy = e.clientY - drag.startY;
     if (Math.abs(dy) > 4) drag.moved = true;
     const vh = window.innerHeight;
-    const newTop = Math.max(vh * 0.1, Math.min(vh - 60, drag.startTop + dy));
+    const newTop = Math.max(vh * 0.1, Math.min(vh - 96, drag.startTop + dy));
     // 直接用 transform 對應 top
     sidebar.style.transform = `translateY(${newTop}px)`;
   });
