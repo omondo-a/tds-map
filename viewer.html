@@ -1,0 +1,2601 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+<meta name="theme-color" content="#ffffff">
+<title>東京 DisneySea 設施地圖</title>
+<link rel="apple-touch-icon" href="https://cdn.jsdelivr.net/gh/omondo-a/tds-map@main/DPA.svg">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  :root {
+    --bg:         #eef2f7;
+    --panel:      #ffffff;
+    --panel-alt:  #f7f9fc;
+    --panel-hover:#f1f5f9;
+    --border:     #e2e8f0;
+    --border-strong:#cbd5e1;
+    --text:       #1e293b;
+    --muted:      #64748b;
+    --accent:     #0077cc;
+    --accent-soft:#e0f2fe;
+
+    --dpa:        #0077cc;
+    --pp:         #16a34a;
+    --sp:         #ea7c1a;
+    --er:         #8e44ad;
+    --none:       #94a3b8;
+    --rain:       #64748b;
+    --thrill:     #dc2626;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; height: 100%; font-family: -apple-system, "Segoe UI", "Microsoft JhengHei", "PingFang TC", sans-serif; background: var(--bg); color: var(--text); }
+  #app { display: flex; height: 100vh; }
+
+  /* ============ 側邊欄 ============ */
+  #sidebar { width: 380px; background: var(--panel); border-right: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; flex-shrink: 0; }
+  #sidebar header { padding: 14px 18px; border-bottom: 1px solid var(--border); background: linear-gradient(180deg, #ffffff 0%, #f7fafc 100%); }
+  #sidebar h1 { margin: 0; font-size: 17px; letter-spacing: 0.5px; color: var(--text); display: flex; align-items: center; gap: 8px; }
+  #sidebar .header-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  #sidebar .subtitle { color: var(--muted); font-size: 12px; margin-top: 4px; }
+  .mode-toggle {
+    background: var(--panel-alt); color: var(--muted);
+    border: 1px solid var(--border); padding: 5px 10px;
+    border-radius: 999px; cursor: pointer; font-size: 12px; font-weight: 600;
+    flex-shrink: 0; transition: all 0.15s;
+  }
+  .mode-toggle:hover { background: var(--panel-hover); }
+  body.mode-planning .mode-toggle { background: var(--sp); color: #fff; border-color: var(--sp); }
+  body:not(.mode-planning) .planning-only { display: none !important; }
+
+  /* 拖動把手 (預設隱藏，只在手機顯示) */
+  .sheet-drag-handle { display: none; }
+  #btn-back {
+    display: none; background: none; border: none; color: var(--accent);
+    cursor: pointer; font-size: 13px; padding: 0; margin-bottom: 4px;
+    font-weight: 500;
+  }
+  #btn-back.show { display: block; }
+  #btn-back:hover { text-decoration: underline; }
+
+  #controls { padding: 12px 18px; border-bottom: 1px solid var(--border); background: var(--panel-alt); }
+  #controls .row { display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; align-items: center; }
+  #controls .row:last-child { margin-bottom: 0; }
+  #controls button {
+    background: var(--panel); color: var(--text);
+    border: 1px solid var(--border-strong); padding: 6px 12px;
+    border-radius: 6px; cursor: pointer; font-size: 12px;
+    transition: all 0.15s;
+  }
+  #controls button:hover { background: var(--panel-hover); border-color: var(--accent); }
+  #controls button.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+  #controls button.danger.active { background: var(--sp); border-color: var(--sp); }
+  #controls .label { font-size: 11px; color: var(--muted); margin-right: 2px; }
+
+  /* ============ 過濾器晶片 ============ */
+  .filter-chip {
+    display: inline-flex; align-items: center; gap: 4px;
+    background: var(--panel); color: var(--muted);
+    border: 1.5px solid var(--border); padding: 3px 12px;
+    border-radius: 999px; cursor: pointer; font-size: 12px;
+    font-weight: 500; user-select: none;
+    transition: all 0.15s;
+  }
+  .filter-chip:hover { border-color: var(--border-strong); }
+  .filter-chip .chip-icon { width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; }
+  .filter-chip .chip-icon svg { width: 100%; height: 100%; }
+
+  /* Pass 篩選 - 純圓形圖示按鈕 */
+  .filter-chip[data-filter="pass"] {
+    width: 38px; height: 38px; padding: 0;
+    border-radius: 50%; justify-content: center;
+    position: relative;
+  }
+  .filter-chip[data-filter="pass"] .chip-icon { width: 22px; height: 22px; }
+  .filter-chip[data-filter="pass"]:not(.on) { opacity: 0.35; filter: grayscale(0.4); }
+  .filter-chip[data-filter="pass"]:not(.on):hover { opacity: 0.7; filter: none; }
+  .filter-chip.dpa { color: #fff; background: var(--dpa); border-color: var(--dpa); }
+  .filter-chip.pp  { color: #fff; background: var(--pp);  border-color: var(--pp); }
+  .filter-chip.sp  { color: #fff; background: var(--sp);  border-color: var(--sp); }
+  .filter-chip.er  { color: #fff; background: var(--er);  border-color: var(--er); }
+  .filter-chip[data-val="none"] {
+    color: var(--muted); background: var(--panel-alt);
+    border-color: var(--border-strong); font-weight: 700;
+  }
+  .filter-chip[data-val="none"].on { color: #fff; background: var(--none); border-color: var(--none); }
+
+  /* 屬性 tag 篩選 (雨天、刺激) - 較大的膠囊按鈕 */
+  .filter-chip[data-filter="tag"] {
+    padding: 8px 16px;
+    font-size: 13px;
+    font-weight: 600;
+    gap: 6px;
+  }
+  .filter-chip[data-val="rain"] {
+    color: #0ea5e9; border-color: #0ea5e9;
+  }
+  .filter-chip[data-val="rain"].on   { background: #0ea5e9; border-color: #0ea5e9; color: #fff; }
+  .filter-chip[data-val="thrill"] {
+    color: var(--thrill); border-color: var(--thrill);
+  }
+  .filter-chip[data-val="thrill"].on { background: var(--thrill); border-color: var(--thrill); color: #fff; }
+
+  /* ============ 側邊清單 ============ */
+  #list-container { flex: 1; overflow-y: auto; background: var(--panel); }
+  .list-section-title {
+    padding: 10px 18px 6px; font-size: 11px; font-weight: 700;
+    color: var(--muted); text-transform: uppercase; letter-spacing: 1px;
+    background: var(--panel);
+    position: sticky; top: 0; z-index: 1;
+    border-bottom: 1px solid var(--border);
+  }
+
+  /* 區域卡片 */
+  .region-card {
+    padding: 12px 18px; border-bottom: 1px solid var(--border);
+    cursor: pointer; display: flex; align-items: center; gap: 12px;
+    transition: background 0.1s;
+  }
+  .region-card:hover { background: var(--panel-hover); }
+  .region-card.selected { background: var(--accent-soft); }
+  .region-color {
+    width: 6px; align-self: stretch; border-radius: 3px; flex-shrink: 0;
+  }
+  .region-info { flex: 1; min-width: 0; }
+  .region-name { font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 2px; }
+  .region-en { font-size: 11px; color: var(--muted); }
+  .region-count { font-size: 11px; color: var(--muted); margin-top: 3px; }
+  .region-arrow { color: var(--muted); font-size: 18px; }
+
+  /* 設施項目 */
+  .facility { padding: 10px 18px; border-bottom: 1px solid var(--border); cursor: pointer; transition: background 0.1s; }
+  .facility:hover { background: var(--panel-hover); }
+  .facility.selected { background: var(--accent-soft); border-left: 3px solid var(--accent); padding-left: 15px; }
+  body.mode-planning .facility.placed .fac-name::after { content: " ✓"; color: #16a34a; font-size: 11px; font-weight: 700; }
+  .facility .fac-num { display: inline-flex; align-items: center; justify-content: center; min-width: 28px; height: 22px; padding: 0 6px; background: var(--panel-alt); border: 1px solid var(--border); border-radius: 4px; font-size: 11px; font-weight: 700; margin-right: 8px; color: var(--text); transition: all 0.15s; }
+  .facility .fac-num[data-edit-num]:hover {
+    background: var(--accent-soft); border-color: var(--accent); color: var(--accent); cursor: pointer;
+  }
+  .facility .fac-num.num-empty { color: var(--muted); border-style: dashed; }
+  .popup-title .num[data-edit-num] { cursor: pointer; transition: all 0.15s; }
+  .popup-title .num[data-edit-num]:hover { background: var(--accent); color: #fff; }
+  .popup-title .num.num-empty { border: 1px dashed var(--border-strong); background: transparent; color: var(--muted); }
+  .facility .fac-name { font-size: 13px; font-weight: 500; color: var(--text); }
+  .facility .fac-area { font-size: 11px; color: var(--muted); margin-left: 36px; margin-top: 3px; }
+  .facility .fac-alt { font-size: 11px; color: var(--muted); margin-left: 36px; margin-top: 2px; line-height: 1.3; }
+  .facility .fac-tags { margin-left: 36px; margin-top: 5px; display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
+
+  /* 路線項目 */
+  .route-item {
+    padding: 10px 18px; border-bottom: 1px solid var(--border);
+    cursor: pointer; display: flex; align-items: center; gap: 10px;
+    transition: background 0.1s;
+  }
+  .route-item:hover { background: var(--panel-hover); }
+  .route-item.selected { background: var(--accent-soft); }
+  .route-swatch {
+    width: 20px; height: 20px; border-radius: 4px; flex-shrink: 0;
+    border: 1.5px solid #fff; box-shadow: 0 0 0 1px var(--border);
+  }
+  .route-name { flex: 1; font-size: 13px; font-weight: 500; }
+  .route-actions { display: flex; gap: 4px; }
+  .route-actions button {
+    background: none; border: 1px solid var(--border); color: var(--muted);
+    padding: 2px 6px; border-radius: 4px; cursor: pointer; font-size: 11px;
+  }
+  .route-actions button:hover { background: var(--panel-hover); color: var(--text); }
+
+  /* ============ Tag ============ */
+  .tag {
+    display: inline-flex; align-items: center; gap: 3px;
+    font-size: 10px; padding: 2px 6px 2px 3px;
+    border-radius: 999px; color: #fff; font-weight: 600;
+  }
+  .tag.rain, .tag.thrill { padding: 2px 8px; }
+  .tag .tag-icon { width: 14px; height: 14px; display: inline-flex; align-items: center; justify-content: center; }
+  .tag .tag-icon svg { width: 100%; height: 100%; }
+  .tag.dpa { background: var(--dpa); }
+  .tag.pp  { background: var(--pp); }
+  .tag.sp  { background: var(--sp); }
+  .tag.er  { background: var(--er); }
+  .tag.rain {
+    background: #0ea5e9;
+    padding: 2px 8px 2px 6px;
+    box-shadow: 0 0 0 1.5px rgba(255,255,255,0.6) inset;
+  }
+  .tag.thrill { background: var(--thrill); }
+
+  /* ============ 地圖 ============ */
+  #map-container { flex: 1; position: relative; background: var(--bg); min-width: 0; display: flex; flex-direction: column; }
+  #map { width: 100%; flex: 1 1 auto; min-height: 0; background: var(--bg); }
+  .leaflet-container { background: var(--bg); font-family: inherit; }
+
+  /* ============ 底部詳細面板 ============ */
+  #detail-sheet {
+    flex: 0 0 auto;
+    height: 0;
+    max-height: 55vh;
+    background: var(--panel);
+    border-top: 1px solid var(--border);
+    box-shadow: 0 -4px 20px rgba(0,0,0,0.08);
+    overflow: hidden;
+    transition: height 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+  }
+  #detail-sheet.show { height: min(55vh, 480px); }
+  #detail-sheet .sheet-handle {
+    position: absolute; top: 6px; left: 50%; transform: translateX(-50%);
+    width: 40px; height: 4px; border-radius: 2px;
+    background: var(--border-strong); opacity: 0.6; pointer-events: none;
+  }
+  #detail-sheet .sheet-close {
+    position: absolute; top: 8px; right: 10px; z-index: 10;
+    width: 32px; height: 32px; border-radius: 50%;
+    background: rgba(255,255,255,0.9); border: 1px solid var(--border);
+    cursor: pointer; font-size: 18px; line-height: 1;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--muted); box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+  }
+  #detail-sheet .sheet-close:hover { color: var(--text); background: #fff; }
+  #detail-sheet .sheet-body {
+    height: 100%; overflow-y: auto;
+    padding: 18px 20px 20px;
+  }
+  #detail-sheet .sheet-image {
+    margin: 0 -20px 12px;
+    background: #edf2f7;
+    position: relative;
+    text-align: center;
+    display: flex; align-items: center; justify-content: center;
+    max-height: 280px;
+    overflow: hidden;
+  }
+  #detail-sheet .sheet-image img {
+    max-width: 500px;
+    width: 100%;
+    max-height: 280px;
+    height: auto;
+    object-fit: contain;
+    display: block;
+  }
+  #detail-sheet .sheet-image .no-image {
+    padding: 40px 20px; text-align: center; color: var(--muted); font-size: 13px; width: 100%;
+  }
+  #detail-sheet .sheet-image .img-badge {
+    position: absolute; top: 10px; right: 10px;
+    background: rgba(0,0,0,0.7); color: #fff;
+    padding: 3px 10px; border-radius: 4px; font-size: 11px; font-weight: 600;
+    backdrop-filter: blur(4px);
+  }
+  #detail-sheet .sheet-title {
+    display: flex; align-items: center; gap: 10px;
+    font-size: 20px; font-weight: 700; color: var(--text); margin-bottom: 6px;
+  }
+  #detail-sheet .sheet-title .num {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 32px; padding: 3px 10px; background: var(--accent-soft); color: var(--accent);
+    border-radius: 6px; font-size: 14px; font-weight: 700; cursor: pointer;
+    transition: all 0.15s;
+  }
+  #detail-sheet .sheet-title .num:hover { background: var(--accent); color: #fff; }
+  #detail-sheet .sheet-title .num.num-empty { border: 1.5px dashed var(--border-strong); background: transparent; color: var(--muted); }
+  #detail-sheet .sheet-alt { color: var(--muted); font-size: 13px; line-height: 1.5; margin-bottom: 3px; }
+  #detail-sheet .sheet-meta { margin-top: 14px; display: grid; grid-template-columns: 1fr; gap: 6px; }
+  #detail-sheet .sheet-meta .row { display: flex; gap: 10px; font-size: 13px; }
+  #detail-sheet .sheet-meta .k { color: var(--muted); min-width: 44px; }
+  #detail-sheet .sheet-tags { margin-top: 14px; display: flex; gap: 6px; flex-wrap: wrap; }
+  #detail-sheet .sheet-actions { margin-top: 16px; display: flex; gap: 8px; flex-wrap: wrap; }
+  #detail-sheet .sheet-actions button {
+    padding: 6px 14px; font-size: 12px; border-radius: 6px;
+    background: var(--panel-alt); color: var(--text); border: 1px solid var(--border-strong);
+    cursor: pointer;
+  }
+  #detail-sheet .sheet-actions button:hover { background: var(--panel-hover); }
+  #detail-sheet .sheet-actions button.danger { color: var(--thrill); }
+
+  /* 區域熱點 (Overview 上的區域按鈕) - 中心對齊 */
+  .region-hotspot {
+    display: inline-block;
+    padding: 8px 14px; border-radius: 999px;
+    background: rgba(255,255,255,0.95); backdrop-filter: blur(4px);
+    border: 2px solid; box-shadow: 0 3px 12px rgba(0,0,0,0.25);
+    font-weight: 700; font-size: 13px;
+    cursor: pointer;
+    white-space: nowrap;
+    transform: translate(-50%, -50%);
+    transform-origin: center center;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+    will-change: transform;
+  }
+  .region-hotspot:hover {
+    transform: translate(-50%, -50%) scale(1.1);
+    box-shadow: 0 5px 20px rgba(0,0,0,0.35);
+  }
+  .region-hotspot-inner { display: flex; align-items: center; gap: 6px; pointer-events: none; }
+
+  /* ============ 放置區 ============ */
+  #drop-zone {
+    position: absolute; inset: 20px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(4px);
+    border: 2px dashed var(--border-strong); border-radius: 12px;
+    z-index: 500; padding: 20px; text-align: center;
+  }
+  #drop-zone.hover { border-color: var(--accent); background: var(--accent-soft); }
+  #drop-zone h2 { margin: 0 0 8px; color: var(--text); font-size: 20px; }
+  #drop-zone p { color: var(--muted); margin: 4px 0; }
+  #drop-zone code { background: var(--panel-alt); padding: 2px 6px; border-radius: 4px; font-size: 12px; color: var(--accent); border: 1px solid var(--border); }
+  #drop-zone input { margin-top: 16px; }
+
+  /* ============ 圖釘 ============ */
+  .marker-pin {
+    width: 40px; height: 40px; border-radius: 50%;
+    border: 3px solid #fff;
+    display: flex; align-items: center; justify-content: center;
+    color: #fff; font-size: 14px; font-weight: 800;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    cursor: pointer; position: relative;
+  }
+  .marker-pin.shop {
+    background: #7c3aed; border-radius: 8px; font-size: 18px;
+  }
+  .marker-pin.dining {
+    background: #dc2626; font-size: 18px;
+  }
+  .marker-pin.transit {
+    background: #0891b2; border-radius: 6px; font-size: 16px;
+    padding-bottom: 2px;
+  }
+  .marker-pin.shop .marker-badge,
+  .marker-pin.dining .marker-badge,
+  .marker-pin.transit .marker-badge { display: none; }
+  .marker-pin .marker-badge {
+    position: absolute; bottom: -5px; right: -5px;
+    width: 20px; height: 20px; border-radius: 50%;
+    background: #fff; border: 2px solid #fff;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.25);
+    color: var(--dpa);
+  }
+  .marker-pin .marker-badge svg { width: 15px; height: 15px; }
+  .marker-pin[data-pass="dpa"] .marker-badge { color: var(--dpa); }
+  .marker-pin[data-pass="pp"]  .marker-badge { color: var(--pp); }
+  .marker-pin[data-pass="sp"]  .marker-badge { color: var(--sp); }
+  .marker-pin[data-pass="er"]  .marker-badge { color: var(--er); }
+
+  /* 路線繪製中的點 */
+  .route-vertex {
+    width: 12px; height: 12px; border-radius: 50%;
+    background: #fff; border: 2px solid;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+  }
+
+  /* ============ Popup ============ */
+  .leaflet-popup-content-wrapper { background: var(--panel); color: var(--text); border-radius: 10px; box-shadow: 0 4px 20px rgba(0,0,0,0.15); }
+  .leaflet-popup-tip { background: var(--panel); }
+  .leaflet-popup-content { margin: 14px 16px; font-size: 13px; line-height: 1.5; }
+  .popup-title { font-size: 15px; font-weight: 700; margin-bottom: 4px; color: var(--text); }
+  .popup-title .num { display: inline-flex; align-items: center; justify-content: center; min-width: 26px; padding: 2px 6px; background: var(--accent-soft); color: var(--accent); border-radius: 4px; font-size: 11px; margin-right: 6px; font-weight: 700; }
+  .popup-en { color: var(--muted); font-size: 11px; margin-bottom: 2px; }
+  .popup-ja { color: var(--muted); font-size: 11px; margin-bottom: 10px; }
+  .popup-meta { margin-bottom: 4px; }
+  .popup-meta .k { color: var(--muted); margin-right: 6px; font-size: 11px; }
+  .popup-tags { margin-top: 10px; display: flex; gap: 5px; flex-wrap: wrap; }
+  .popup-image { margin: -4px -4px 10px; border-radius: 6px; overflow: hidden; background: var(--panel-alt); position: relative; }
+  .popup-image img { width: 100%; height: auto; display: block; max-height: 200px; object-fit: cover; }
+  .popup-image .img-badge {
+    position: absolute; top: 6px; right: 6px;
+    background: rgba(0, 0, 0, 0.65); color: #fff;
+    padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 600;
+    backdrop-filter: blur(4px);
+  }
+  .popup-image .no-image {
+    padding: 30px 12px; text-align: center; color: var(--muted);
+    font-size: 12px; background: var(--panel-alt); border: 1px dashed var(--border-strong); border-radius: 6px;
+  }
+  .popup-image-controls { margin-top: 10px; display: flex; gap: 6px; }
+  .popup-image-controls button {
+    padding: 4px 10px; font-size: 11px; border-radius: 4px;
+    background: var(--panel-alt); color: var(--text); border: 1px solid var(--border-strong);
+    cursor: pointer;
+  }
+  .popup-image-controls button:hover { background: var(--panel-hover); }
+  .popup-actions { margin-top: 8px; display: flex; gap: 6px; }
+  .popup-actions button {
+    padding: 4px 10px; font-size: 11px; border-radius: 4px;
+    background: var(--panel-alt); color: var(--text); border: 1px solid var(--border-strong);
+    cursor: pointer;
+  }
+  .popup-actions button:hover { background: var(--panel-hover); }
+
+  /* ============ 狀態列 & 圖例 ============ */
+  #status {
+    position: absolute; top: 12px; right: 12px;
+    background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(4px);
+    padding: 8px 12px; border-radius: 8px; font-size: 12px;
+    color: var(--text); z-index: 400;
+    border: 1px solid var(--border); max-width: 320px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  }
+  #status.edit { border-color: var(--sp); background: rgba(254, 243, 199, 0.95); }
+  #status.route { border-color: var(--accent); background: var(--accent-soft); }
+  #status .hint { font-size: 11px; color: var(--muted); margin-top: 4px; }
+  #status .actions { margin-top: 6px; display: flex; gap: 6px; }
+  #status .actions button {
+    background: var(--panel); color: var(--text);
+    border: 1px solid var(--border-strong); padding: 3px 8px;
+    border-radius: 4px; font-size: 11px; cursor: pointer;
+  }
+  #status .actions button:hover { background: var(--panel-hover); }
+  #status .actions button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+  #legend {
+    position: absolute; bottom: 12px; right: 12px;
+    background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(4px);
+    padding: 10px 12px; border-radius: 8px; font-size: 11px;
+    z-index: 400; border: 1px solid var(--border);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    color: var(--text);
+    transition: bottom 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  /* 底部面板開啟時把圖例往上推 */
+  #map-container.sheet-open #legend {
+    bottom: calc(min(55vh, 480px) + 12px);
+  }
+  #legend .row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  #legend .row:last-child { margin-bottom: 0; }
+  #legend .legend-icon {
+    width: 24px; height: 24px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    color: #fff; flex-shrink: 0;
+  }
+  #legend .legend-icon svg { width: 16px; height: 16px; }
+  #legend .legend-icon.dpa { background: var(--dpa); }
+  #legend .legend-icon.pp { background: var(--pp); }
+  #legend .legend-icon.sp { background: var(--sp); }
+  #legend .legend-icon.er { background: var(--er); }
+  #legend .legend-icon.none { background: var(--none); font-size: 10px; font-weight: 700; }
+
+  /* 捲軸 */
+  ::-webkit-scrollbar { width: 8px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+  .search {
+    width: 100%; background: var(--panel); border: 1px solid var(--border-strong);
+    color: var(--text); padding: 7px 10px; border-radius: 6px; font-size: 12px;
+    outline: none; transition: border-color 0.15s;
+  }
+  .search:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+
+  /* ============ 分類切換 ============ */
+  .cat-tabs {
+    display: flex; gap: 4px; background: var(--panel-alt);
+    padding: 3px; border-radius: 8px; border: 1px solid var(--border);
+    width: 100%;
+  }
+  .cat-tab {
+    flex: 1; padding: 6px 8px; text-align: center; font-size: 12px;
+    font-weight: 600; color: var(--muted); cursor: pointer;
+    border-radius: 5px; user-select: none; transition: all 0.15s;
+    display: flex; align-items: center; justify-content: center; gap: 4px;
+  }
+  .cat-tab:hover { background: var(--panel); }
+  .cat-tab.on { background: var(--panel); color: var(--accent); box-shadow: 0 1px 2px rgba(0,0,0,0.08); }
+  .cat-tab.on[data-cat="shop"] { color: #7c3aed; }
+  .cat-tab.on[data-cat="dining"] { color: #dc2626; }
+  .cat-tab .count { font-size: 10px; opacity: 0.7; }
+
+  /* 使用者項目 - 卡片 */
+  .facility.user-item.shop .fac-num { background: #ede9fe; border-color: #c4b5fd; color: #7c3aed; }
+  .facility.user-item.dining .fac-num { background: #fee2e2; border-color: #fca5a5; color: #dc2626; }
+
+  /* ============ 新增項目 modal ============ */
+  #modal-backdrop {
+    position: fixed; inset: 0; background: rgba(30,41,59,0.5);
+    backdrop-filter: blur(3px); z-index: 2000;
+    display: none; align-items: center; justify-content: center;
+  }
+  #modal-backdrop.show { display: flex; }
+  #modal {
+    background: var(--panel); border-radius: 12px; padding: 20px;
+    width: 90%; max-width: 400px;
+    box-shadow: 0 20px 40px rgba(0,0,0,0.2);
+  }
+  #modal h3 { margin: 0 0 14px; font-size: 17px; color: var(--text); }
+  #modal .cat-picker { display: flex; gap: 8px; margin-bottom: 14px; }
+  #modal .cat-picker button {
+    flex: 1; padding: 12px; font-size: 14px; font-weight: 600;
+    background: var(--panel-alt); border: 2px solid var(--border);
+    border-radius: 8px; cursor: pointer; color: var(--text);
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+    transition: all 0.15s;
+  }
+  #modal .cat-picker button:hover { border-color: var(--border-strong); }
+  #modal .cat-picker button.on[data-cat="shop"]   { border-color: #7c3aed; background: #ede9fe; color: #7c3aed; }
+  #modal .cat-picker button.on[data-cat="dining"] { border-color: #dc2626; background: #fee2e2; color: #dc2626; }
+  #modal .cat-picker button.on[data-cat="transit"]{ border-color: #0891b2; background: #cffafe; color: #0891b2; }
+  #modal .cat-picker .icon { font-size: 22px; }
+  #modal label { display: block; margin: 10px 0 4px; font-size: 12px; color: var(--muted); font-weight: 500; }
+  #modal input, #modal textarea {
+    width: 100%; padding: 8px 10px; font-size: 13px;
+    border: 1px solid var(--border-strong); border-radius: 6px;
+    background: var(--panel); color: var(--text); outline: none;
+    font-family: inherit;
+  }
+  #modal input:focus, #modal textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  #modal textarea { resize: vertical; min-height: 60px; }
+  #modal .chk-row { display: flex; flex-wrap: wrap; gap: 12px; padding: 4px 0; }
+  #modal .chk-row label {
+    display: inline-flex; align-items: center; gap: 4px;
+    margin: 0; font-size: 13px; color: var(--text); font-weight: 500;
+    cursor: pointer;
+  }
+  #modal .chk-row input[type="checkbox"] { width: auto; margin: 0; }
+  #modal .actions { display: flex; gap: 8px; margin-top: 16px; justify-content: flex-end; }
+  #modal .actions button {
+    padding: 8px 16px; font-size: 13px; border-radius: 6px;
+    cursor: pointer; font-weight: 500;
+  }
+  #modal .actions .cancel { background: var(--panel); color: var(--text); border: 1px solid var(--border-strong); }
+  #modal .actions .save { background: var(--accent); color: #fff; border: none; }
+  #modal .actions .save:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  /* 手機切換按鈕 (預設隱藏) */
+  #mobile-toggle { display: none; }
+  #sidebar-backdrop { display: none; }
+
+  /* ============ 手機版：側邊欄變底部三段面板 ============ */
+  @media (max-width: 768px) {
+    #app { flex-direction: column; }
+    #sidebar {
+      position: fixed;
+      left: 0; right: 0; bottom: 0;
+      top: auto;
+      width: 100%; max-width: none;
+      height: 90vh;
+      z-index: 1000;
+      border-top-left-radius: 20px;
+      border-top-right-radius: 20px;
+      border-right: none;
+      box-shadow: 0 -6px 24px rgba(0, 0, 0, 0.12);
+      transform: translateY(calc(100% - 80px));
+      transition: transform 0.32s cubic-bezier(0.32, 0.72, 0, 1);
+      touch-action: none;
+    }
+    #sidebar.snap-half { transform: translateY(50vh); }
+    #sidebar.snap-full { transform: translateY(0); }
+    #sidebar.dragging { transition: none; }
+    body.no-select #sidebar,
+    body.no-select { user-select: none; }
+
+    .sheet-drag-handle {
+      display: block;
+      padding: 8px 0 6px;
+      cursor: grab;
+      touch-action: none;
+      flex-shrink: 0;
+    }
+    .sheet-drag-handle::before {
+      content: '';
+      display: block;
+      margin: 0 auto;
+      width: 40px; height: 4px;
+      background: var(--border-strong);
+      border-radius: 2px;
+    }
+    .sheet-drag-handle:active { cursor: grabbing; }
+
+    #sidebar header { padding: 4px 18px 12px; background: var(--panel); }
+    #sidebar #controls { padding: 10px 18px; }
+    #sidebar #list-container { touch-action: pan-y; }
+
+    #mobile-toggle, #sidebar-backdrop { display: none; }
+
+    /* 地圖填滿螢幕，底部 80px 讓給 sheet peek */
+    #map-container { padding-bottom: 80px; }
+    #status { top: 12px; right: 12px; left: 12px; max-width: none; font-size: 11px; padding: 6px 10px; }
+    #legend { bottom: 92px; right: 12px; font-size: 10px; padding: 8px 10px; max-width: 150px; }
+    #legend .legend-icon { width: 20px; height: 20px; }
+    #legend .legend-icon svg { width: 12px; height: 12px; }
+    /* 面板開啟時把圖例往上推 */
+    #map-container.sheet-open #legend {
+      bottom: calc(min(55vh, 480px) + 12px);
+    }
+    .marker-pin { width: 42px; height: 42px; font-size: 14px; border-width: 3px; }
+    .marker-pin .marker-badge { width: 22px; height: 22px; }
+    .marker-pin .marker-badge svg { width: 16px; height: 16px; }
+    .region-hotspot { font-size: 12px; padding: 6px 12px; }
+    /* 手機詳情面板: 較小的圖 + 較大觸控目標 */
+    #detail-sheet.show { height: min(65vh, 560px); }
+    #detail-sheet .sheet-image { max-height: 200px; }
+    #detail-sheet .sheet-image img { max-height: 200px; }
+    #detail-sheet .sheet-title { font-size: 18px; }
+    .facility { padding: 14px 18px; min-height: 56px; }
+    .region-card { padding: 16px 18px; min-height: 68px; }
+    .cat-tab { padding: 10px 8px; font-size: 13px; }
+    .filter-chip[data-filter="pass"] { width: 44px; height: 44px; }
+    .filter-chip[data-filter="pass"] .chip-icon { width: 26px; height: 26px; }
+    .filter-chip[data-filter="tag"] { padding: 10px 16px; font-size: 13px; }
+    .search { padding: 10px 12px; font-size: 14px; }
+    /* iOS 安全區 */
+    #sidebar { padding-bottom: env(safe-area-inset-bottom); }
+    #detail-sheet .sheet-body { padding-bottom: calc(20px + env(safe-area-inset-bottom)); }
+  }
+  /* 觸控裝置移除 hover 效果避免點擊延遲 */
+  @media (hover: none) {
+    .facility:hover, .region-card:hover, .filter-chip:hover { background: inherit; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <button id="mobile-toggle" aria-label="Menu">☰</button>
+  <div id="sidebar-backdrop"></div>
+  <aside id="sidebar">
+    <div class="sheet-drag-handle"></div>
+    <header>
+      <button id="btn-back">← 返回總覽</button>
+      <h1 id="title">🏰 東京 DisneySea</h1>
+      <div class="subtitle" id="subtitle">全園總覽</div>
+    </header>
+    <div id="controls">
+      <!-- Region view controls -->
+      <div id="controls-region" style="display:none">
+        <div class="row">
+          <div class="cat-tabs" id="cat-tabs">
+            <div class="cat-tab on" data-cat="attraction">🎡 設施<span class="count" id="cnt-attraction"></span></div>
+            <div class="cat-tab on" data-cat="shop">🛍️ 購物<span class="count" id="cnt-shop"></span></div>
+            <div class="cat-tab on" data-cat="dining">🍽️ 餐食<span class="count" id="cnt-dining"></span></div>
+          </div>
+        </div>
+        <div class="row">
+          <input class="search" id="search" placeholder="搜尋名稱..." />
+        </div>
+        <div class="row" id="chip-row-pass"></div>
+        <div class="row" id="chip-row-tag">
+          <span class="filter-chip" data-filter="tag" data-val="rain">🌧️ 雨天友善</span>
+          <span class="filter-chip" data-filter="tag" data-val="thrill">⚠️ 刺激</span>
+        </div>
+      </div>
+      <!-- Overview view controls -->
+      <div id="controls-overview">
+        <div class="row" style="color:var(--muted);font-size:11px">
+          點下方區域卡片進入該區域｜路線和站點在此設定
+        </div>
+      </div>
+    </div>
+    <div id="list-container"></div>
+  </aside>
+  <div id="map-container">
+    <div id="map"></div>
+    <div id="detail-sheet">
+      <div class="sheet-handle"></div>
+      <button class="sheet-close" title="關閉">×</button>
+      <div class="sheet-body" id="sheet-body"></div>
+    </div>
+    <div id="status">
+      <div id="status-text">初始化...</div>
+      <div class="hint" id="status-hint"></div>
+      <div class="actions" id="status-actions"></div>
+    </div>
+    <div id="legend"></div>
+    <div id="loading-view" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(255,255,255,0.9);z-index:500">
+      <div style="width:40px;height:40px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite"></div>
+      <div style="margin-top:12px;color:var(--muted);font-size:13px">載入地圖中...</div>
+    </div>
+  </div>
+</div>
+<style>@keyframes spin { to { transform: rotate(360deg); } }</style>
+
+
+<script>
+// ============================================================
+// Pass 圖示 (fill 從 #07c 改成 currentColor)
+// ============================================================
+const PASS_ICONS = {
+  dpa: `<svg viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg"><g fill="currentColor"><path d="m19.09 5.68c0-.07-.06-.14-.14-.15l-1.1-.29c-.99-.21-1.8-.91-2.16-1.85l-.6-1.92c-.03-.08-.11-.12-.19-.12s-.16.04-.19.12l-.61 1.92c-.36.94-1.17 1.64-2.16 1.85l-1.1.29c-.08 0-.15.07-.15.15s.07.15.15.15l1.1.29c.99.21 1.8.9 2.16 1.85l.61 1.92c.03.08.11.12.19.12s.16-.04.19-.12l.6-1.92c.36-.94 1.17-1.64 2.16-1.85l1.1-.29c.07-.01.13-.07.14-.15"/><path d="m23.49 12.06c.75 0 1.5.06 2.24.2.56.12 1.09.34 1.56.67.42.28.76.68.96 1.14.22.65.28 1.34.17 2.01-.01.7-.17 1.4-.45 2.04-.29.59-.7 1.11-1.21 1.52-.53.42-1.12.74-1.76.95-.68.22-1.39.33-2.11.33h-3.72c-.08 0-.16.06-.17.14l-1.01 4.67c-.02.08-.09.14-.18.14h-2.74c-.1 0-.18-.08-.18-.17 0-.01 0-.03 0-.04l2.82-13.2c.05-.24.26-.41.51-.41h5.28zm-.76 6.35c.67.04 1.33-.15 1.88-.54.44-.38.7-.93.74-1.51.08-.34.06-.7-.07-1.03-.25-.39-.67-.64-1.13-.67-.35-.04-.71-.07-1.07-.07h-2.52c-.08 0-.16.05-.18.13l-.8 3.49c-.02.09.04.18.13.2h.04 2.96z"/><path d="m9.07 12.06c1.59-.12 3.17.38 4.4 1.4 1.03 1.06 1.56 2.5 1.47 3.98.01 1.14-.16 2.27-.5 3.35-.31.99-.82 1.9-1.5 2.68-.69.77-1.54 1.38-2.5 1.77-1.11.45-2.3.66-3.5.64h-4.48c-.58 0-1.04-.47-1.04-1.04 0-.07 0-.14.02-.21l2.46-11.75c.1-.48.53-.83 1.02-.83h4.15zm-1.99 11.27c.71.01 1.42-.13 2.06-.43.58-.27 1.1-.67 1.51-1.16.41-.5.73-1.08.93-1.7.22-.67.33-1.37.32-2.07 0-.46-.05-.92-.16-1.36-.1-.39-.28-.75-.53-1.06-.25-.3-.57-.54-.94-.69-.44-.17-.91-.25-1.38-.24h-2.29l-1.86 8.71z"/><path d="m36.36 12.21 2.27 13.47c.02.1-.05.19-.14.2 0 0-.02 0-.03 0h-2.69c-.09 0-.16-.06-.17-.15l-.38-2.52c-.01-.09-.09-.15-.17-.15h-5.08c-.06 0-.12.03-.15.09l-1.57 2.65c-.03.06-.09.09-.15.09h-2.81c-.1 0-.18-.08-.18-.18 0-.03 0-.06.02-.09l8.02-13.47c.03-.05.09-.09.15-.09h2.9c.08 0 .16.06.17.15zm-1.67 8.33c.1 0 .18-.08.18-.18v-.02l-.66-5.05h-.04l-2.86 4.98c-.05.09-.02.19.07.24.03.01.06.02.09.02h3.23z"/><path d="m33.08 3.97c-3.69-3.33-8.87-3.85-14.3-1.61l.51.64c1.64-.47 3.33-.7 5.04-.66 1.99.16 3.88.97 5.37 2.31 1.71 1.48 2.88 3.5 3.31 5.72h3.69c-.52-2.46-1.78-4.7-3.62-6.41z"/><path d="m29.69 25.94c-.22.3-.44.6-.67.89-4.03 5.13-9.3 8.18-13.89 8.53-1.64.15-3.29-.12-4.79-.78-.88-.35-1.69-.85-2.38-1.49-1.07-1.19-1.83-2.62-2.22-4.18h-1.11c.39 2.76 1.7 5.31 3.7 7.24 5.96 5.51 16.5 2.77 23.54-6.12 1.01-1.29 1.92-2.66 2.7-4.1h-4.88z"/></g></svg>`,
+  pp: `<svg viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg"><clipPath id="pp-a"><path d="m0 0h40v40h-40z"/></clipPath><g clip-path="url(#pp-a)" fill="currentColor"><path d="m28.58 23.21 4.21 4.76c.27.3.72.33 1.02.06.13-.11.21-.26.24-.43l1.39-8.63-2.98-.69-3.88 4.92z"/><path d="m39.95 6.3c-.18-.59-.8-.92-1.39-.74l-4.67 1.41-6 1.74-5.43 1.57 9.61 2.2s.05.02.08.02l4.18.96.83-5.17 2.04-.62c.58-.18.92-.8.74-1.38"/><path d="m11.21 4.05c2.6.43 3.19 1.14 3.73 3.76.02.06.09.1.15.08.04-.01.07-.04.08-.08.54-2.61 1.13-3.32 3.73-3.76.06 0 .1-.04.1-.1s-.04-.1-.1-.1c-2.61-.44-3.19-1.15-3.73-3.76-.02-.06-.09-.1-.15-.08-.04.01-.07.04-.08.08-.54 2.62-1.13 3.33-3.73 3.76-.06 0-.1.04-.1.1s.04.1.1.1z"/><path d="m18.09 7.55c1.38.23 1.69.61 1.98 1.99.01.03.05.05.08.04.02 0 .03-.02.04-.04.29-1.39.6-1.76 1.98-1.99.03 0 .05-.03.05-.06 0-.02-.02-.04-.05-.05-1.38-.23-1.69-.61-1.98-1.99-.01-.03-.05-.05-.08-.04-.02 0-.03.02-.04.04-.29 1.39-.6 1.76-1.98 1.99-.03 0-.05.03-.05.06 0 .02.02.04.05.05"/><path d="m36.73 15.31-6.53-1.51h-.03l-11.32-2.6-10.97-2.51-6.5-1.6c-.6-.15-1.2.22-1.35.81-.15.6.22 1.2.81 1.35l4.25 1.05 3.16 14.35 3.2 14.53c.13.57.69.93 1.26.8.24-.05.45-.19.6-.38l9.21-11.68 9.07-11.51 4.63 1.07c.6.14 1.2-.23 1.34-.83s-.23-1.2-.83-1.34zm-15.37 4.63s-.09.04-.13.06l-.16.05c-.24.06-.5.07-.75.01l-.07-.02c-.28-.07-.54-.21-.76-.39.56 1.5-.19 3.17-1.69 3.73s-3.17-.19-3.73-1.69c-.42-1.12-.11-2.39.79-3.18-.28.06-.57.06-.85 0l-.07-.02c-.24-.07-.47-.19-.65-.36l-.11-.11s-.06-.07-.09-.11c-.55-.87-.3-2.02.56-2.57.07-.05.15-.1.23-.15l.16-.08c.76-.4 1.69-.2 2.23.47.49.75.37 1.73-.29 2.34 1-.29 2.07-.02 2.82.7-.36-.87.05-1.87.92-2.24.77-.32 1.66-.04 2.1.66l.11.15c.05.08.09.15.13.24.5.9.19 2.03-.7 2.54"/></g></svg>`,
+  sp: `<svg viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg"><g fill="currentColor"><path d="m6.82 30.67s.03.07.04.1c.89 1.81 2.15 3.42 3.68 4.74 2.42 2.07 5.46 3.29 8.64 3.46 1.22.08 2.45 0 3.64-.25 3.29-.63 6.25-2.39 8.39-4.97 2.17-2.56 3.39-5.8 3.45-9.16.03-1.12-.07-2.24-.3-3.33-.08-.39-.2-.76-.3-1.15-.03-.11-.1-.14-.21-.14-3.7 0-7.4 0-11.11 0-.06 0-.12 0-.18-.02-.2-.05-.28-.19-.31-.48-.02-.68-.44-1.28-1.08-1.53-.74-.33-1.58-.32-2.32.01-.48.2-.86.6-1.03 1.1-.46 1.01-.02 2.2.99 2.66.08.04.17.07.26.1.39.11.78.16 1.18.16.95.04 1.88.25 2.76.62 1.62.64 2.88 1.95 3.46 3.59.35.98.48 2.02.38 3.06-.06.94-.33 1.86-.8 2.67-.67 1.15-1.69 2.06-2.91 2.59-1.23.55-2.59.77-3.93.62-1.21-.1-2.38-.49-3.39-1.15-1.16-.74-2.02-1.88-2.41-3.2-.03-.09-.06-.12-.16-.12h-6.3s-.08 0-.13 0zm26.31-12.95s0-.03 0-.04c0-.02-.02-.04-.03-.06-2.31-4.68-6.94-7.76-12.14-8.09-1.46-.11-2.93.01-4.35.36-3.56.84-6.67 3-8.71 6.04-1.55 2.24-2.43 4.88-2.53 7.6-.06 1.12.01 2.24.22 3.34.09.47.22.93.33 1.39.03.11.09.14.2.14h11.09c.4 0 .46.07.5.47.04.5.28.96.67 1.27.86.65 2.03.73 2.97.19.87-.5 1.23-1.57.83-2.49-.29-.68-.88-1.18-1.6-1.34-.42-.08-.84-.13-1.26-.15-.97-.09-1.92-.36-2.79-.8-1.12-.53-2.05-1.41-2.65-2.49-.7-1.3-.94-2.8-.67-4.26.26-1.72 1.21-3.26 2.63-4.26 1.13-.82 2.48-1.28 3.87-1.32 1.22-.07 2.45.17 3.55.7 1.54.72 2.72 2.04 3.24 3.66.01.09.1.15.19.14h6.29zm-21.19-8.5s.03-.01.05-.02c.89-.48 1.83-.89 2.8-1.2.07-.02.08-.06.08-.13-.02-.26-.03-.52-.06-.78-.15-1.39-.73-2.7-1.67-3.73-1.5-1.76-3.8-2.63-6.09-2.31-1.36.15-2.64.72-3.65 1.65-1.89 1.58-2.77 4.06-2.28 6.47.4 2.56 2.23 4.67 4.71 5.44.06.04.14.01.18-.05.56-.82 1.19-1.58 1.89-2.29.02-.02.04-.05.06-.08-2.33 0-4.22-1.88-4.22-4.2 0-2.33 1.88-4.22 4.2-4.22.17 0 .35 0 .52.03 1.12.13 2.14.72 2.8 1.63.83 1.08 1.08 2.5.67 3.8zm20.08 3s.06.04.09.07c.68.69 1.3 1.43 1.84 2.23.04.09.14.13.23.09h.01c1.28-.42 2.41-1.21 3.25-2.27 1.28-1.55 1.81-3.59 1.44-5.57-.2-1.27-.77-2.46-1.64-3.41-1.31-1.52-3.22-2.38-5.23-2.35-1.23-.02-2.45.32-3.49.97-2.09 1.22-3.38 3.45-3.41 5.87-.02.08.03.16.11.18h.01c.89.29 1.76.65 2.59 1.09l.22.12c-.39-1.24-.19-2.59.56-3.65.71-1.09 1.9-1.76 3.2-1.81 2.31-.13 4.29 1.64 4.42 3.95v.02c.13 2.34-1.66 4.34-4 4.47-.07 0-.15 0-.22 0zm-10.03-7.19h1.9v-1.58c0-.08-.01-.16-.03-.24-.15-.74-.81-1.26-1.56-1.22h-3.94c-.24 0-.48 0-.72 0-.84 0-1.53.67-1.53 1.51v.06 1.48h1.89v2.28c1.32-.17 2.66-.18 3.99-.02v-2.26z"/></g></svg>`,
+  er: `<svg viewBox="0 0 40.01 40" xmlns="http://www.w3.org/2000/svg"><g fill="currentColor"><path d="m39.6 20.32c-.79-1.29-2.47-1.69-3.76-.9s-.39.23-1.03.59c-1.88-1.96-3.5-4.16-4.82-6.54-2.53-4.48-3.82-8.9-3.59-11.67.07-.92-.61-1.72-1.52-1.79-.18-.01-.37 0-.55.05-.13.03-.25.08-.37.14-2.38 1.24-5.09 5.73-6.69 11.45-1.16 4.9-1.6 9.94-1.29 14.97l-.15.02c-.28.05-.49.08-.63.1l-.16.02h-.04c-1.5.19-2.55 1.56-2.36 3.06s1.56 2.55 3.06 2.36c8.11-1.2 15.91-3.95 22.99-8.09 1.29-.79 1.69-2.46.91-3.75zm-13.49 1.18c-2.2.79-4.63-.35-5.43-2.56s.35-4.63 2.56-5.43c1-.36 2.1-.33 3.08.08-1.56.78-2.19 2.69-1.41 4.25.65 1.29 2.09 1.98 3.5 1.67-.5.92-1.32 1.63-2.31 1.98z"/><path d="m8.45 29.9c-.12-.24-.34-.41-.6-.48-.26-.08-.54-.05-.78.08s-.04.01-.06.02c-.08.05-.15.12-.2.2-.1.11-.17.24-.21.38-.08.25-.04.52.09.75l4.75 8.61c.11.25.33.43.6.5.26.07.54.04.77-.1.48-.26.66-.87.4-1.35l-4.75-8.61z"/><path d="m9.58 27.77-1.93-2.48.95-2.99c.04-.1-.02-.22-.12-.26-.05-.02-.1-.02-.14 0l-2.95 1.06-2.55-1.83c-.09-.07-.21-.05-.28.04-.03.04-.04.09-.04.13l.1 3.13-2.53 1.88c-.09.06-.11.19-.05.28.03.04.07.07.12.08l3.02.88.99 2.98c.03.11.14.17.25.14.05-.01.09-.04.11-.09l1.76-2.59 3.14-.02c.11 0 .2-.08.21-.19 0-.05-.01-.1-.05-.14z"/><path d="m7.63 15.15c0 .08.05.14.13.15l.33.04c.24.04.47.11.69.2.22.08.42.22.56.4.33.64.54 1.35.6 2.07 0 .07.05.11.15.11h.02c.08 0 .15-.04.17-.11l.07-.41c.05-.31.13-.62.22-.93.06-.26.16-.51.3-.73.41-.43.99-.67 1.58-.65.1-.03.15-.08.15-.15s-.05-.13-.15-.13l-.3-.04c-.24-.05-.47-.13-.69-.23-.22-.08-.42-.22-.58-.4-.32-.67-.52-1.4-.59-2.14-.03-.07-.1-.11-.17-.11h-.02c-.1 0-.15.04-.15.11l-.09.45c-.06.3-.14.63-.24.99-.05.25-.15.48-.28.69-.43.41-.99.65-1.58.67-.06 0-.12.04-.13.1v.03z"/><path d="m2.77 9.02.41.05c.3.05.59.13.86.26.27.1.52.27.7.5.42.81.68 1.68.76 2.59 0 .09.06.14.19.14h.03c.09 0 .18-.05.22-.14l.08-.51c.07-.39.16-.78.27-1.16.08-.32.21-.63.38-.92.51-.54 1.23-.83 1.97-.81.12-.04.19-.1.19-.19 0-.11-.06-.16-.19-.16l-.38-.05c-.3-.07-.59-.16-.87-.28-.28-.1-.53-.28-.73-.5-.4-.84-.65-1.74-.73-2.67-.03-.09-.12-.14-.22-.13h-.03c-.13 0-.19.04-.19.13l-.11.57c-.07.38-.17.79-.3 1.24-.06.31-.18.6-.35.86-.53.51-1.24.81-1.97.83-.08-.01-.15.05-.16.12v.04c0 .1.06.18.16.19z"/></g></svg>`
+};
+const PASS_LABEL = { dpa: '尊享優先入場', pp: '優先通行證', sp: '標準通行證', er: '入場申請' };
+
+// ============================================================
+// 東迪官方縮圖 ID (facilityId -> mediaId)
+// URL: https://media1.tokyodisneyresort.jp/images/adventure/attraction/{id}_thum_name.jpg
+// 表演類 (Believe / Sky Full of Colors / Dance the Globe / Duffy / Dreams) 沒收錄，可自己上傳
+// ============================================================
+const TDR_ATTRACTION_IDS = {
+  'fs-peterpan': 1124, 'fs-tinker': 1131, 'fs-frozen': 1110, 'fs-rapunzel': 1117,
+  'med-gondola': 581, 'med-soaring': 1005, 'med-steamer': 121, 'med-fortress': 221,
+  'am-turtle': 91, 'am-tot': 71, 'am-railway': 101, 'am-steamer': 111, 'am-toystory': 161, 'am-bigcity': 191,
+  'pd-nemo': 963, 'pd-aqua': 421, 'pd-railway': 471,
+  'lr-indy': 531, 'lr-steamer': 131, 'lr-raging': 371,
+  'ar-caravan': 651, 'ar-jasmine': 541, 'ar-sindbad': 511, 'ar-lamp': 331,
+  'me-ariel': 491, 'me-jelly': 551, 'me-scuttle': 591, 'me-flounder': 261, 'me-blowfish': 301, 'me-theater': 361, 'me-whirlpool': 391,
+  'my-journey': 631, 'my-20k': 621
+};
+// 表演類的 CDN 路徑是 /show/ 而非 /attraction/
+const TDR_SHOW_IDS = {
+  'med-believe': 2067,   // 堅信!～夢想之海～
+  'med-sky':     2390,   // 眾彩滿夜空 (煙火)
+  'am-dance':    2699,   // 舞動全球!
+  'am-duffy':    2439,   // 達菲與好友的非凡友誼
+  'lr-dreams':   2608    // 夢想起飛
+};
+function tdrImageUrl(itemId) {
+  if (TDR_SHOW_IDS[itemId]) return `https://media1.tokyodisneyresort.jp/images/adventure/show/${TDR_SHOW_IDS[itemId]}_thum_name.jpg`;
+  if (TDR_ATTRACTION_IDS[itemId]) return `https://media1.tokyodisneyresort.jp/images/adventure/attraction/${TDR_ATTRACTION_IDS[itemId]}_thum_name.jpg`;
+  return null;
+}
+
+// ============================================================
+// 區域資料 (含各區地圖檔名)
+// ============================================================
+const OVERVIEW_ID = '_overview';
+const REGIONS = {
+  'mediterranean':      { name: '地中海港灣',        en: 'Mediterranean Harbor', image: '地中海港灣.png',      color: '#ef7500' },
+  'american':           { name: '美國海濱',          en: 'American Waterfront',  image: '美國濱海.png',        color: '#ef0005' },
+  'fantasy-springs':    { name: '夢幻泉鄉',          en: 'Fantasy Springs',      image: '夢幻泉鄉.png',        color: '#004768' },
+  'port-discovery':     { name: '發現港',            en: 'Port Discovery',       image: '發現港.png',          color: '#bc8a00' },
+  'lost-river':         { name: '失落河三角洲',      en: 'Lost River Delta',     image: '失落河三角洲.png',    color: '#008632' },
+  'arabian':            { name: '阿拉伯海岸',        en: 'Arabian Coast',        image: '阿拉伯海岸.png',      color: '#7d2a92' },
+  'mermaid-mysterious': { name: '美人魚礁湖 + 神秘島', en: 'Mermaid Lagoon + Mysterious Island', image: '美人魚+神秘島.png', color: '#f9339b' }
+};
+
+// 舊 area id (facility) → 新 region id (合併美人魚+神秘島)
+const AREA_TO_REGION = {
+  'fantasy-springs': 'fantasy-springs',
+  'mediterranean':   'mediterranean',
+  'american':        'american',
+  'port-discovery':  'port-discovery',
+  'lost-river':      'lost-river',
+  'arabian':         'arabian',
+  'mermaid':         'mermaid-mysterious',
+  'mysterious':      'mermaid-mysterious',
+  'park-wide':       OVERVIEW_ID   // 全域項目掛在總覽下
+};
+
+const AREAS = {
+  'fantasy-springs':    { zh: '夢幻泉鄉',       en: 'Fantasy Springs',      color: '#004768' },
+  'mediterranean':      { zh: '地中海港灣',     en: 'Mediterranean Harbor', color: '#ef7500' },
+  'american':           { zh: '美國海濱',       en: 'American Waterfront',  color: '#ef0005' },
+  'port-discovery':     { zh: '發現港',         en: 'Port Discovery',       color: '#bc8a00' },
+  'lost-river':         { zh: '失落河三角洲',   en: 'Lost River Delta',     color: '#008632' },
+  'arabian':            { zh: '阿拉伯海岸',     en: 'Arabian Coast',        color: '#7d2a92' },
+  'mermaid':            { zh: '美人魚礁湖',     en: 'Mermaid Lagoon',       color: '#f9339b' },
+  'mysterious':         { zh: '神秘島',         en: 'Mysterious Island',    color: '#009dd0' },
+  'park-wide':          { zh: '園區全域',       en: 'Park-wide',            color: '#d97706' }
+};
+
+// ============================================================
+// 設施資料 (num 之後你會重新編排)
+// ============================================================
+const FACILITIES = [
+  { id:'fs-peterpan', area:'fantasy-springs', num:'', zh:'小飛俠夢幻島歷險記', en:"Peter Pan's Never Land Adventure", ja:'ピーターパンのネバーランドアドベンチャー', type:'搭乘式', duration:'約 6 分鐘', pass:['dpa'], rain:true, thrill:false },
+  { id:'fs-tinker',   area:'fantasy-springs', num:'', zh:'奇妙仙子妙妙小車', en:"Fairy Tinker Bell's Busy Buggies", ja:'フェアリー・ティンカーベルのビジーバギー', type:'搭乘式', duration:'約 2 分鐘', pass:[], rain:false, thrill:false },
+  { id:'fs-frozen',   area:'fantasy-springs', num:'', zh:'安娜與艾莎的冰雪之旅', en:"Anna and Elsa's Frozen Journey", ja:'アナとエルサのフローズンジャーニ', type:'搭乘式', duration:'約 6 分 30 秒', pass:['dpa'], rain:true, thrill:true },
+  { id:'fs-rapunzel', area:'fantasy-springs', num:'', zh:'樂佩公主天燈盛會', en:"Rapunzel's Lantern Festival", ja:'ラプンツェルのランタンフェスティバル', type:'搭乘式', duration:'約 5 分鐘', pass:['dpa'], rain:true, thrill:false },
+  { id:'med-gondola',   area:'mediterranean', num:'', zh:'威尼斯貢多拉遊船', en:'Venetian Gondolas', ja:'ヴェネツィアン・ゴンドラ', type:'搭乘式周遊型', duration:'約 11 分 30 秒', pass:[], rain:false, thrill:false },
+  { id:'med-soaring',   area:'mediterranean', num:'', zh:'翱翔:夢幻奇航', en:'Soaring: Fantastic Flight', ja:'ソアリン:ファンタスティック・フライト', type:'搭乘式體驗型', duration:'約 5 分鐘', pass:['dpa'], rain:true, thrill:false },
+  { id:'med-steamer',   area:'mediterranean', num:'', zh:'迪士尼海洋渡輪航線 (地中海)', en:'DisneySea Transit Steamer Line', ja:'ディズニーシー・トランジットスチーマーライン', type:'搭乘式運輸型', duration:'約 7 分鐘', pass:[], rain:false, thrill:false, note:'跟美國海濱站連動' },
+  { id:'med-fortress',  area:'mediterranean', num:'', zh:'要塞探險 (含挑戰李奧納多)', en:'Fortress Explorations & The Leonardo Challenge', ja:'フォートレス・エクスプロレーション / ザ・レオナルドチャレンジ', type:'體驗型散步型', duration:'自由參觀', pass:[], rain:false, thrill:false, note:'包含挑戰李奧納多互動體驗' },
+  { id:'med-believe',   area:'mediterranean', num:'', zh:'堅信!～夢想之海～', en:'Believe! Sea of Dreams', ja:'ビリーヴ!～シー・オブ・ドリームス～', type:'娛樂表演', duration:'約 30 分鐘', pass:['dpa','er'], rain:false, thrill:false },
+  { id:'med-sky',       area:'park-wide',     num:'🎆', zh:'眾彩滿夜空', en:'Sky Full of Colors', ja:'スカイ・フル・オブ・カラーズ', type:'娛樂表演 · 煙火', duration:'約 5 分鐘 (20:45)', pass:[], rain:false, thrill:false, note:'園區全域皆可觀賞' },
+  { id:'am-turtle',   area:'american', num:'', zh:'龜龜漫談', en:'Turtle Talk', ja:'タートル・トーク', type:'劇場型體驗型', duration:'約 30 分鐘', pass:['pp'], rain:true, thrill:false },
+  { id:'am-tot',      area:'american', num:'', zh:'驚魂古塔', en:'Tower of Terror', ja:'タワー・オブ・テラー', type:'搭乘式', duration:'約 2 分鐘', pass:['dpa'], rain:true, thrill:true },
+  { id:'am-railway',  area:'american', num:'', zh:'迪士尼海洋電氣化鐵路 (美國)', en:'DisneySea Electric Railway', ja:'ディズニーシー・エレクトリックレールウェイ', type:'搭乘式運輸型', duration:'約 2 分 30 秒', pass:[], rain:true, thrill:false, note:'前往發現港站' },
+  { id:'am-steamer',  area:'american', num:'', zh:'迪士尼海洋渡輪航線 (美國)', en:'DisneySea Transit Steamer Line', ja:'ディズニーシー・トランジットスチーマーライン', type:'搭乘式運輸型', duration:'約 13 分鐘', pass:[], rain:false, thrill:false, note:'跟地中海站連動' },
+  { id:'am-toystory', area:'american', num:'', zh:'玩具總動員瘋狂遊戲屋', en:'Toy Story Mania!', ja:'トイ・ストーリー・マニア!', type:'搭乘式', duration:'約 7 分鐘', pass:['dpa'], rain:true, thrill:false },
+  { id:'am-bigcity',  area:'american', num:'', zh:'大都會交通工具', en:'Big City Vehicles', ja:'ビッグシティ・ヴィークル', type:'搭乘式周遊型', duration:'約 10 分鐘', pass:[], rain:false, thrill:false },
+  { id:'am-dance',    area:'american', num:'', zh:'舞動全球!', en:'Dance the Globe!', ja:'ダンス・ザ・グローブ!', type:'娛樂表演', duration:'約 25 分鐘', pass:['dpa','er'], rain:false, thrill:false },
+  { id:'am-duffy',    area:'american', num:'', zh:'達菲與好友的非凡友誼', en:"Duffy and Friends' Wonderful Friendship", ja:'ダッフィー＆フレンズのワンダフル・フレンドシップ', type:'娛樂表演', duration:'約 20 分鐘', pass:[], rain:true, thrill:false, note:'預約制' },
+  { id:'pd-nemo',    area:'port-discovery', num:'', zh:'海底巡遊艇:尼莫＆好友的海洋世界', en:'Nemo & Friends SeaRider', ja:'ニモ＆フレンズ・シーライダー', type:'搭乘式體驗型', duration:'約 5 分鐘', pass:['pp'], rain:true, thrill:false },
+  { id:'pd-aqua',    area:'port-discovery', num:'', zh:'水上逗趣船', en:'Aquatopia', ja:'アクアトピア', type:'搭乘式', duration:'約 2 分 30 秒', pass:[], rain:false, thrill:false },
+  { id:'pd-railway', area:'port-discovery', num:'', zh:'迪士尼海洋電氣化鐵路 (發現港)', en:'DisneySea Electric Railway', ja:'ディズニーシー・エレクトリックレールウェイ', type:'搭乘式運輸型', duration:'約 2 分 30 秒', pass:[], rain:true, thrill:false, note:'前往美國海濱站' },
+  { id:'lr-indy',    area:'lost-river', num:'', zh:'印第安納瓊斯冒險旅程:水晶骷髏頭魔宮', en:'Indiana Jones Adventure', ja:'インディ・ジョーンズ・アドベンチャー', type:'搭乘式', duration:'約 3 分鐘', pass:['pp'], rain:true, thrill:true },
+  { id:'lr-steamer', area:'lost-river', num:'', zh:'迪士尼海洋渡輪航線 (失落河)', en:'DisneySea Transit Steamer Line', ja:'ディズニーシー・トランジットスチーマーライン', type:'搭乘式運輸型', duration:'約 6 分鐘', pass:[], rain:false, thrill:false },
+  { id:'lr-raging',  area:'lost-river', num:'', zh:'忿怒雙神', en:'Raging Spirits', ja:'レイジングスピリッツ', type:'搭乘式', duration:'約 1 分 30 秒', pass:['pp'], rain:false, thrill:true },
+  { id:'lr-dreams',  area:'lost-river', num:'', zh:'夢想起飛', en:'Dreams Take Flight', ja:'ドリームス・テイク・フライト', type:'娛樂表演', duration:'約 25 分鐘', pass:['dpa','er'], rain:true, thrill:false },
+  { id:'ar-caravan',  area:'arabian', num:'', zh:'沙漠商隊旋轉木馬', en:'Caravan Carousel', ja:'キャラバンカルーセル', type:'搭乘式', duration:'約 2 分 30 秒', pass:[], rain:true, thrill:false },
+  { id:'ar-jasmine',  area:'arabian', num:'', zh:'茉莉公主的飛天魔毯', en:"Jasmine's Flying Carpets", ja:'ジャスミンのフライングカーペット', type:'搭乘式', duration:'約 1 分 30 秒', pass:[], rain:false, thrill:false },
+  { id:'ar-sindbad',  area:'arabian', num:'', zh:'辛巴達傳奇之旅', en:"Sindbad's Storybook Voyage", ja:'シンドバッド・ストーリーブック・ヴォヤッジ', type:'搭乘式', duration:'約 10 分鐘', pass:[], rain:true, thrill:false },
+  { id:'ar-lamp',     area:'arabian', num:'', zh:'神燈劇場', en:'The Magic Lamp Theater', ja:'マジックランプシアター', type:'劇場型體驗型', duration:'約 23 分鐘', pass:['pp'], rain:true, thrill:false },
+  { id:'me-ariel',      area:'mermaid', num:'', zh:'艾莉兒遊樂場', en:"Ariel's Playground", ja:'アリエルのプレイグラウンド', type:'體驗型散步型', duration:'自由參觀', pass:[], rain:true, thrill:false },
+  { id:'me-jelly',      area:'mermaid', num:'', zh:'跳躍水母', en:"Jumpin' Jellyfish", ja:'ジャンピン・ジェリーフィッシュ', type:'搭乘式', duration:'約 1 分鐘', pass:[], rain:true, thrill:false },
+  { id:'me-scuttle',    area:'mermaid', num:'', zh:'史卡托的寄居蟹', en:"Scuttle's Scooters", ja:'スカットルのスクーター', type:'搭乘式', duration:'約 1 分 30 秒', pass:[], rain:false, thrill:false },
+  { id:'me-flounder',   area:'mermaid', num:'', zh:'小胖的飛魚雲霄飛車', en:"Flounder's Flying Fish Coaster", ja:'フランダーのフライングフィッシュコースター', type:'搭乘式', duration:'約 1 分鐘', pass:[], rain:false, thrill:true },
+  { id:'me-blowfish',   area:'mermaid', num:'', zh:'河豚氣球競賽', en:'Blowfish Balloon Race', ja:'ブローフィッシュ・バルーンレース', type:'搭乘式', duration:'約 1 分 30 秒', pass:[], rain:true, thrill:false },
+  { id:'me-theater',    area:'mermaid', num:'', zh:'美人魚礁湖劇場', en:'Mermaid Lagoon Theater', ja:'マーメイドラグーンシアター', type:'劇場型', duration:'約 14 分鐘', pass:[], rain:true, thrill:false },
+  { id:'me-whirlpool',  area:'mermaid', num:'', zh:'旋轉海藻杯', en:'The Whirlpool', ja:'ワールプール', type:'搭乘式', duration:'約 1 分 30 秒', pass:[], rain:true, thrill:false },
+  { id:'my-journey', area:'mysterious', num:'', zh:'地心探險之旅', en:'Journey to the Center of the Earth', ja:'センター・オブ・ジ・アース', type:'搭乘式', duration:'約 3 分鐘', pass:['dpa'], rain:true, thrill:true },
+  { id:'my-20k',     area:'mysterious', num:'', zh:'海底兩萬哩', en:'20,000 Leagues Under the Sea', ja:'海底2万マイル', type:'搭乘式', duration:'約 5 分鐘', pass:['pp'], rain:true, thrill:false }
+];
+
+// ============================================================
+// 【線上地圖 URL 設定】
+// 把 8 個檔案上傳到 GitHub repo 後填在這裡，之後就不用重新拖檔。
+// 範例: 'https://cdn.jsdelivr.net/gh/YourName/tds-map@main/地中海港灣.png'
+// 留空字串則會 fallback 到本地/快取/拖曳流程。
+// ============================================================
+const IMAGE_URLS = {
+  overview:              'https://raw.githubusercontent.com/omondo-a/tds-map/main/TDS_map_tc.png',
+  'mediterranean':       'https://cdn.jsdelivr.net/gh/omondo-a/tds-map@main/地中海港灣.png',
+  'american':            'https://cdn.jsdelivr.net/gh/omondo-a/tds-map@main/美國濱海.png',
+  'fantasy-springs':     'https://cdn.jsdelivr.net/gh/omondo-a/tds-map@main/夢幻泉鄉.png',
+  'port-discovery':      'https://cdn.jsdelivr.net/gh/omondo-a/tds-map@main/發現港.png',
+  'lost-river':          'https://cdn.jsdelivr.net/gh/omondo-a/tds-map@main/失落河三角洲.png',
+  'arabian':             'https://cdn.jsdelivr.net/gh/omondo-a/tds-map@main/阿拉伯海岸.png',
+  'mermaid-mysterious':  'https://cdn.jsdelivr.net/gh/omondo-a/tds-map@main/美人魚+神秘島.png'
+};
+
+// 分類
+const CATEGORIES = {
+  attraction: { label: '設施', icon: '🎡' },
+  shop:       { label: '購物', icon: '🛍️' },
+  dining:     { label: '餐食', icon: '🍽️' },
+  transit:    { label: '站點', icon: '🚉' }   // 交通站點 (只在總覽上使用)
+};
+// FACILITIES 全部視為 attraction 類
+FACILITIES.forEach(f => { if (!f.category) f.category = 'attraction'; });
+
+// 路線預設調色盤
+const ROUTE_COLORS = ['#0284c7','#dc2626','#16a34a','#ea7c1a','#8e44ad','#0891b2','#e11d48','#a16207'];
+
+// ============================================================
+// 狀態
+// ============================================================
+const STATE = {
+  view: OVERVIEW_ID,
+  map: null,
+  imageBounds: null,
+  layer: L.layerGroup(),
+  drawingLayer: L.layerGroup(),
+  coords: {},                 // 見上方註解
+  routes: {},                 // 見上方註解
+  itemNums: {},               // 覆寫設施編號: itemId -> '3'
+  itemNotes: {},              // 覆寫備註: itemId -> string
+  itemOverrides: {},          // 覆寫其他欄位: itemId -> { type, duration, pass, rain, thrill }
+  userItems: [],              // 使用者新增的購物 / 餐食: {id, category, region, zh, ja, en, note}
+  filters: {
+    pass: new Set(['dpa','pp','er','none']),
+    tag: new Set(),
+    cat: new Set(['attraction','shop','dining']),
+    search: ''
+  },
+  editMode: 'off',            // 'off' | 'facility' | 'route'
+  selectedId: null,
+  selectedRouteId: null,
+  drawingRoute: null,
+  pendingItem: null,          // 新增後等待放置的 userItem
+  mode: 'tourist',            // 'tourist' | 'planning'
+  sheetSnap: 'peek'           // 'peek' | 'half' | 'full' (手機底部面板位置)
+};
+
+// ============================================================
+// 儲存 (IndexedDB) - v3, 強容錯: 遇到 store 不存在也不會 throw
+// ============================================================
+const IDB_NAME = 'tds-map-db';
+const IDB_STORE = 'kv';
+const IDB_VERSION = 3;
+let idbDbCache = null;
+
+function idbOpen() {
+  if (idbDbCache) return Promise.resolve(idbDbCache);
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(IDB_NAME, IDB_VERSION);
+    req.onupgradeneeded = (ev) => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(IDB_STORE)) {
+        db.createObjectStore(IDB_STORE);
+      }
+    };
+    req.onsuccess = () => { idbDbCache = req.result; resolve(idbDbCache); };
+    req.onerror = () => reject(req.error);
+    req.onblocked = () => reject(new Error('IndexedDB blocked'));
+  });
+}
+async function idbEnsureStore() {
+  const db = await idbOpen();
+  if (db.objectStoreNames.contains(IDB_STORE)) return db;
+  // 目前這個 DB 連線沒有 kv store：關掉重開強制升級
+  db.close();
+  idbDbCache = null;
+  return await idbOpen();
+}
+async function idbPut(key, value) {
+  try {
+    const db = await idbEnsureStore();
+    if (!db.objectStoreNames.contains(IDB_STORE)) return;
+    return await new Promise((resolve, reject) => {
+      const tx = db.transaction(IDB_STORE, 'readwrite');
+      tx.objectStore(IDB_STORE).put(value, key);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  } catch (e) { console.warn('idbPut fail:', e); }
+}
+async function idbGet(key) {
+  try {
+    const db = await idbEnsureStore();
+    if (!db.objectStoreNames.contains(IDB_STORE)) return undefined;
+    return await new Promise((resolve) => {
+      const tx = db.transaction(IDB_STORE, 'readonly');
+      const req = tx.objectStore(IDB_STORE).get(key);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => resolve(undefined);
+    });
+  } catch (e) { console.warn('idbGet fail:', e); return undefined; }
+}
+async function idbDelete(key) {
+  try {
+    const db = await idbEnsureStore();
+    if (!db.objectStoreNames.contains(IDB_STORE)) return;
+    return await new Promise((resolve, reject) => {
+      const tx = db.transaction(IDB_STORE, 'readwrite');
+      tx.objectStore(IDB_STORE).delete(key);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  } catch (e) { console.warn('idbDelete fail:', e); }
+}
+// ============================================================
+// 【已標記資料】從 editor 版按「📤 匯出」貼在這裡的完整 JSON
+// ============================================================
+const EMBEDDED_DATA = /* EMBEDDED_DATA_START */ {
+  "coords": {
+    "_overview": {
+      "mediterranean": [1697, 1920],
+      "american": [2022, 1356],
+      "fantasy-springs": [3055, 3127],
+      "port-discovery": [2384, 1691],
+      "lost-river": [2758, 2227],
+      "mermaid-mysterious": [2150, 2045],
+      "arabian": [2026, 2744],
+      "med-gondola": [744.1933274995374, 968.7126703722791],
+      "med-soaring": [1078.8701007705158, 1694.4062767362348],
+      "med-steamer": [1098.2107183213511, 1308.4348221347798],
+      "med-fortress": [1342.7957774732536, 1113.6931803688124],
+      "med-believe": [989.9494936611665, 1173.7972567696688],
+      "am-turtle": [1043, 276],
+      "am-tot": [802.2151801520437, 270.7686457116961],
+      "am-railway": [877.5, 602],
+      "am-steamer": [1280.7760628579306, 625.5229424914313],
+      "am-toystory": [589.8467290413497, 450.7094965860313],
+      "am-bigcity": [1056.0159181224165, 576.7654507763198],
+      "am-dance": [917.4179890418026, 524.7193631183179],
+      "am-duffy": [1387.8047032081756, 794.3903528218177],
+      "fs-tinker": [2434.3069644105703, 2645.9858308810544],
+      "fs-peterpan": [2301.115767530265, 2533.011154955796],
+      "fs-frozen": [2359.386916165399, 3062.208321132007],
+      "fs-rapunzel": [2138.1943927748925, 2769.6633708413374],
+      "pd-nemo": [1871.811999014283, 1069.0971963874463],
+      "pd-aqua": [1657.7547183137933, 964.4469702672068],
+      "pd-railway": [1739.810009248981, 1227.2617426828083],
+      "lr-indy": [1931.272354764419, 1811.1624361491442],
+      "lr-steamer": [1811.1624361491442, 1768.3509800090462],
+      "lr-raging": [1928.8939405344136, 2190.5195058350123],
+      "lr-dreams": [1807.5948148041361, 1413.9672597382355],
+      "ar-caravan": [1367.5881822531294, 2068.031172989732],
+      "ar-jasmine": [1824.2437144141743, 2335.6027738653443],
+      "ar-sindbad": [1732.6747665589646, 2377.2250228904395],
+      "ar-lamp": [1360.452939563113, 2184.573470259999],
+      "me-scuttle": [1523.3743143184859, 1842.081821139215],
+      "me-flounder": [1704.1337957988994, 1848.0278567142286],
+      "me-ariel": [1610.789247542955, 1651.801440851775],
+      "me-jelly": [1623.517169604313, 1683.6212460051695],
+      "me-blowfish": [1634.8308781032977, 1714.0268375961912],
+      "me-theater": [1644.7303730399094, 1741.6040020624664],
+      "me-whirlpool": [1662.5115467738042, 1770.7293942390518],
+      "my-journey": [1412.7780526232327, 1274.830027282917],
+      "my-20k": [1334.290383033053, 1422.2917095432545]
+    },
+    "mediterranean": {
+      "med-gondola": [230, 161],
+      "med-soaring": [563, 889],
+      "med-steamer": [583, 500],
+      "med-fortress": [828, 307],
+      "med-leonardo": [777, 309],
+      "med-believe": [476.5, 355.5]
+    },
+    "american": {
+      "am-turtle": [524.7193631183179, 173.2246615422652],
+      "am-tot": [282.84271247461896, 169.70562748477138],
+      "am-railway": [360.6244584051392, 499.2173875177025],
+      "am-steamer": [767.9179643685906, 521.8448045156721],
+      "am-toystory": [72.12489168102785, 349.31074990615446],
+      "am-bigcity": [538.8153672641491, 476.589970519733],
+      "am-dance": [403, 423],
+      "am-duffy": [870, 694]
+    },
+    "fantasy-springs": {
+      "fs-peterpan": [415, 267.5],
+      "fs-tinker": [543.4676515562436, 379.35706968586805],
+      "fs-frozen": [469.73681042607484, 797.9579741668259],
+      "fs-rapunzel": [247.355079920566, 504.2238167611538]
+    },
+    "port-discovery": {
+      "pd-nemo": [299.0855894231844, 417.4116973659551],
+      "pd-aqua": [84.4337051651932, 313.35607480321704],
+      "pd-railway": [166.48899610038094, 577.3600543338212]
+    },
+    "lost-river": {
+      "lr-indy": [210.48965935548165, 450.7094965860313],
+      "lr-steamer": [91.56894785520953, 407.303436888432],
+      "lr-raging": [206.3274344529721, 831.2557733869021],
+      "lr-dreams": [89, 54.5]
+    },
+    "arabian": {
+      "ar-caravan": [152.20225116092234, 76.94202199571488],
+      "ar-jasmine": [609, 345],
+      "ar-sindbad": [518, 385],
+      "ar-lamp": [144, 195]
+    },
+    "mermaid-mysterious": {
+      "me-ariel": [399.5735906409143, 1322.3983118830258],
+      "me-jelly": [329.41037085575374, 1064.3403679274354],
+      "me-scuttle": [456, 799],
+      "me-flounder": [643, 805],
+      "me-blowfish": [501, 1127],
+      "me-theater": [484, 1011],
+      "me-whirlpool": [281.4284989122459, 1209.1525958289963],
+      "my-journey": [347.89653634378135, 231.93102422918759],
+      "my-20k": [268.70057685088807, 379.00923471598946]
+    }
+  },
+  "routes": {
+    "_overview": [
+      {
+        "id": "r1786093938549",
+        "name": "渡輪航線",
+        "color": "#8e44ad",
+        "points": [[1096.75, 1301.5], [1282.875, 631.625]]
+      },
+      {
+        "id": "r1786094030945",
+        "name": "電氣化鐵路",
+        "color": "#8e44ad",
+        "points": [[887.4458095707806, 604.5631670895084], [1651.4478874611816, 963.6097660619675]]
+      }
+    ]
+  },
+  "userItems": [],
+  "itemNums": {
+    "med-gondola": "1", "med-soaring": "2", "med-steamer": "3", "med-fortress": "4", "med-leonardo": "4",
+    "med-believe": "⭐", "med-sky": "⭐",
+    "am-turtle": "26", "am-tot": "27", "am-railway": "28", "am-steamer": "29", "am-toystory": "30", "am-bigcity": "31",
+    "am-dance": "⭐", "am-duffy": "⭐",
+    "pd-aqua": "55", "pd-railway": "56", "pd-nemo": "57",
+    "lr-indy": "64", "lr-steamer": "65", "lr-raging": "66", "lr-dreams": "⭐",
+    "fs-peterpan": "79", "fs-tinker": "80", "fs-frozen": "81", "fs-rapunzel": "82",
+    "ar-caravan": "89", "ar-jasmine": "90", "ar-sindbad": "91", "ar-lamp": "92",
+    "me-ariel": "98", "me-jelly": "99", "me-scuttle": "100", "me-flounder": "101",
+    "me-blowfish": "102", "me-theater": "103", "me-whirlpool": "104",
+    "my-20k": "110", "my-journey": "111"
+  },
+  "itemNotes": {
+    "med-believe": "表演時間 20:15",
+    "med-sky": "開始時間 20:45",
+    "lr-dreams": "表演時間 11:00 / 12:25 / 13:50 / 15:55 / 17:20"
+  },
+  "itemOverrides": {
+    "med-sky": { "type": "娛樂表演 · 煙火", "duration": "約 5 分鐘", "pass": [], "rain": false, "thrill": false },
+    "am-duffy": { "type": "娛樂表演", "duration": "約 20 分鐘", "pass": [], "rain": true, "thrill": false }
+  }
+} /* EMBEDDED_DATA_END */;
+
+function loadData() {
+  try {
+    STATE.coords = EMBEDDED_DATA.coords || {};
+    STATE.routes = EMBEDDED_DATA.routes || {};
+    STATE.userItems = EMBEDDED_DATA.userItems || [];
+    STATE.itemNums = EMBEDDED_DATA.itemNums || {};
+    STATE.itemNotes = EMBEDDED_DATA.itemNotes || {};
+    STATE.itemOverrides = EMBEDDED_DATA.itemOverrides || {};
+  } catch (e) { console.error('EMBEDDED_DATA load fail', e); }
+}
+function saveData() { /* 純觀看版, 不儲存 */ }
+// 取得欄位值 (使用者覆寫 > 原本)
+function itemField(item, key) {
+  const ov = STATE.itemOverrides[item.id];
+  if (ov && ov[key] !== undefined) return ov[key];
+  return item[key];
+}
+// 讀取項目的顯示備註 (使用者覆寫 > 原本 note)
+function itemNote(item) {
+  const user = STATE.itemNotes[item.id];
+  if (user !== undefined) return user;
+  return item.note || '';
+}
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+// 取得項目顯示的編號 (使用者覆寫 > 原本 num)
+function itemNum(item) {
+  const v = STATE.itemNums[item.id];
+  return v !== undefined ? v : (item.num || '');
+}
+async function cleanupOldIdb() {
+  // 舊版 IndexedDB 快取的 map (單一地圖鍵名)
+  try { await idbDelete('map-blob'); await idbDelete('map-w'); await idbDelete('map-h'); } catch {}
+}
+function getCoords(viewId) {
+  if (!STATE.coords[viewId]) STATE.coords[viewId] = {};
+  return STATE.coords[viewId];
+}
+function getRoutes(viewId) {
+  if (!STATE.routes[viewId]) STATE.routes[viewId] = [];
+  return STATE.routes[viewId];
+}
+// 將所有項目 (設施 + 使用者新增) 統一以「item」介面表示
+function itemsInRegion(regionId) {
+  const facs = FACILITIES.filter(f => AREA_TO_REGION[f.area] === regionId);
+  const users = STATE.userItems.filter(u => u.region === regionId);
+  return [...facs, ...users];
+}
+function findItemById(id) {
+  return FACILITIES.find(f => f.id === id) || STATE.userItems.find(u => u.id === id) || null;
+}
+
+// ============================================================
+// 圖片載入
+// ============================================================
+async function renderPdfToBlob(file) {
+  const buf = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: buf, disableWorker: true }).promise;
+  const page = await pdf.getPage(1);
+  // 2.8x + JPEG 0.92: 比 3.5x PNG 小約 8~10 倍，file:// 才塞得進 IndexedDB
+  const scale = 2.8;
+  const viewport = page.getViewport({ scale });
+  const canvas = document.createElement('canvas');
+  canvas.width = viewport.width;
+  canvas.height = viewport.height;
+  // 給 canvas 白底避免 PDF 透明區域變黑
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  await page.render({ canvasContext: ctx, viewport }).promise;
+  const blob = await new Promise(r => canvas.toBlob(r, 'image/jpeg', 0.92));
+  return { blob, width: viewport.width, height: viewport.height };
+}
+function loadImageBlob(blob) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(blob);
+    const img = new Image();
+    img.onload = () => resolve({ url, width: img.width, height: img.height });
+    img.onerror = e => { URL.revokeObjectURL(url); reject(e); };
+    img.src = url;
+  });
+}
+// 依檔名匹配區域 id (回傳 view id 或 null)
+function matchViewByFilename(filename) {
+  const name = filename.toLowerCase();
+  if (name.endsWith('.pdf') || name.includes('tds_map')) return OVERVIEW_ID;
+  for (const [rid, r] of Object.entries(REGIONS)) {
+    if (filename === r.image) return rid;
+    // 允許不完全匹配 (例如「美人魚+神秘島.png」)
+    const base = r.image.replace(/\.[^.]+$/, '');
+    if (filename.includes(base)) return rid;
+  }
+  return null;
+}
+
+async function handleFile(file) {
+  if (!file) return;
+  const t = document.getElementById('status-text');
+  const h = document.getElementById('status-hint');
+  t.textContent = '載入中...';
+  h.textContent = file.name;
+  try {
+    let data;
+    if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
+      data = await renderPdfToBlob(file);
+    } else {
+      const img = await loadImageBlob(file);
+      data = { blob: file, width: img.width, height: img.height };
+      URL.revokeObjectURL(img.url);
+    }
+    // 依檔名判斷該存到哪個 view 的快取
+    const matched = matchViewByFilename(file.name);
+    const targetView = matched || STATE.view;
+    const key = mapCacheKey(targetView);
+    let cached = true;
+    try {
+      await idbPut(key + '-blob', data.blob);
+      await idbPut(key + '-w', data.width);
+      await idbPut(key + '-h', data.height);
+    } catch (e) {
+      cached = false;
+      console.warn('IndexedDB 存取失敗:', e);
+      // 明確通知使用者
+      const kb = Math.round((data.blob.size || 0) / 1024);
+      t.textContent = '⚠️ 快取失敗';
+      h.textContent = `檔案 ${kb}KB, 瀏覽器儲存不足或封鎖 file:// 儲存`;
+    }
+    // 只有匹配到目前 view 或無匹配時才立即顯示
+    if (targetView === STATE.view) {
+      const url = URL.createObjectURL(data.blob);
+      initMap({ url, width: data.width, height: data.height });
+    }
+    return targetView;
+  } catch (e) {
+    console.error('載入失敗:', e);
+    t.textContent = '❌ 載入失敗';
+    h.textContent = e.message || String(e);
+    alert('載入失敗:\n' + (e.message || e));
+    return null;
+  }
+}
+
+async function handleFiles(fileList) {
+  const files = Array.from(fileList || []);
+  if (files.length === 0) return;
+  if (files.length === 1) {
+    await handleFile(files[0]);
+    // 若還沒載入目前 view 的地圖，嘗試
+    if (!STATE.map) await loadCurrentView();
+    return;
+  }
+  // 多檔上傳：分別存到對應區域
+  const t = document.getElementById('status-text');
+  const h = document.getElementById('status-hint');
+  const results = [];
+  for (const f of files) {
+    t.textContent = `載入中 (${results.length + 1}/${files.length})...`;
+    h.textContent = f.name;
+    const view = await handleFile(f);
+    if (view) results.push({ file: f.name, view });
+  }
+  const done = results.map(r => r.file).join(', ');
+  t.textContent = `✅ 完成 (${results.length}/${files.length})`;
+  h.textContent = done;
+  // 載入目前 view 的地圖
+  if (!STATE.map) await loadCurrentView();
+}
+function mapCacheKey(view) {
+  return view === OVERVIEW_ID ? 'overview' : ('region-' + view);
+}
+async function tryLoadCachedMap() {
+  const key = mapCacheKey(STATE.view);
+  try {
+    const blob = await idbGet(key + '-blob');
+    const w = await idbGet(key + '-w');
+    const h = await idbGet(key + '-h');
+    if (blob && w && h) {
+      const url = URL.createObjectURL(blob);
+      initMap({ url, width: w, height: h });
+      return true;
+    }
+  } catch {}
+  return false;
+}
+async function tryFetchLocalFile(filename) {
+  try {
+    const r = await fetch(encodeURI('./' + filename));
+    if (!r.ok) return false;
+    const blob = await r.blob();
+    const file = new File([blob], filename, { type: blob.type || 'application/octet-stream' });
+    await handleFile(file);
+    return true;
+  } catch { return false; }
+}
+// 從網址載入 (jsDelivr / GitHub raw / 任何 HTTPS 圖片)
+async function tryFetchUrl(url, fallbackFilename) {
+  if (!url) return false;
+  try {
+    const r = await fetch(url);
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const blob = await r.blob();
+    // 從 URL 取實際檔名 (才不會把 .png 誤判成 .pdf)
+    let filename = fallbackFilename;
+    try {
+      const pathname = new URL(url, location.href).pathname;
+      const last = decodeURIComponent(pathname.split('/').pop() || '');
+      if (last) filename = last;
+    } catch {}
+    const file = new File([blob], filename, { type: blob.type || 'application/octet-stream' });
+    await handleFile(file);
+    return true;
+  } catch (e) {
+    console.warn('URL 載入失敗:', url, e);
+    return false;
+  }
+}
+// 取得當前 view 對應的 URL
+function urlForView(view) {
+  return IMAGE_URLS[view === OVERVIEW_ID ? 'overview' : view] || '';
+}
+
+// ============================================================
+// Leaflet 初始化
+// ============================================================
+function initMap({ url, width, height }) {
+  if (STATE.map) { STATE.map.remove(); STATE.map = null; }
+  const map = L.map('map', {
+    crs: L.CRS.Simple,
+    minZoom: -4, maxZoom: 3, zoomSnap: 0.25,
+    zoomControl: true, attributionControl: false
+  });
+  const bounds = [[0, 0], [height, width]];
+  L.imageOverlay(url, bounds).addTo(map);
+  map.fitBounds(bounds);
+  map.setMaxBounds([[-height * 0.3, -width * 0.3], [height * 1.3, width * 1.3]]);
+  STATE.map = map;
+  STATE.imageBounds = bounds;
+  STATE.layer = L.layerGroup().addTo(map);
+  STATE.drawingLayer = L.layerGroup().addTo(map);
+  map.on('click', onMapClick);
+  refreshLayers();
+  updateStatus();
+}
+
+// ============================================================
+// Marker / Popup 產生器
+// ============================================================
+function passClass(f) {
+  const p = itemField(f, 'pass') || [];
+  if (p.length === 0) return 'none';
+  if (p.length > 1) return 'multi';
+  return p[0];
+}
+function passPrimary(f) {
+  const p = itemField(f, 'pass') || [];
+  if (p.length === 0) return 'none';
+  return p[0];
+}
+function itemIcon(item) {
+  if (item.category === 'shop') {
+    return L.divIcon({
+      className: '',
+      html: `<div class="marker-pin shop"><span>🛍️</span></div>`,
+      iconSize: [30, 30], iconAnchor: [15, 15]
+    });
+  }
+  if (item.category === 'dining') {
+    return L.divIcon({
+      className: '',
+      html: `<div class="marker-pin dining"><span>🍽️</span></div>`,
+      iconSize: [30, 30], iconAnchor: [15, 15]
+    });
+  }
+  if (item.category === 'transit') {
+    return L.divIcon({
+      className: '',
+      html: `<div class="marker-pin transit"><span>🚉</span></div>`,
+      iconSize: [34, 34], iconAnchor: [17, 17]
+    });
+  }
+  // attraction: 用園區色 + Pass 徽章
+  const areaColor = (AREAS[item.area] && AREAS[item.area].color) || '#94a3b8';
+  const primary = passPrimary(item);
+  const badge = (primary !== 'none' && PASS_ICONS[primary])
+    ? `<div class="marker-badge">${PASS_ICONS[primary]}</div>` : '';
+  const n = itemNum(item);
+  return L.divIcon({
+    className: '',
+    html: `<div class="marker-pin" data-pass="${primary}" style="background:${areaColor}"><span>${n || '·'}</span>${badge}</div>`,
+    iconSize: [40, 40], iconAnchor: [20, 20]
+  });
+}
+function passTagHtml(p) {
+  return `<span class="tag ${p}"><span class="tag-icon">${PASS_ICONS[p] || ''}</span>${p.toUpperCase()}</span>`;
+}
+
+// ============================================================
+// 設施 / 項目 圖片 (存 IndexedDB, key: "img-{itemId}")
+// ============================================================
+async function saveItemImage(itemId, blob) {
+  await idbPut('img-' + itemId, blob);
+}
+async function loadItemImage(itemId) {
+  const b = await idbGet('img-' + itemId);
+  return b ? URL.createObjectURL(b) : null;
+}
+async function deleteItemImage(itemId) {
+  await idbDelete('img-' + itemId);
+}
+// ============================================================
+// 底部詳細面板
+// ============================================================
+function showDetailSheet(item) {
+  const sheet = document.getElementById('detail-sheet');
+  const body = document.getElementById('sheet-body');
+  body.innerHTML = sheetHtml(item);
+  sheet.classList.add('show');
+  document.getElementById('map-container').classList.add('sheet-open');
+  STATE.selectedId = item.id;
+  // 手機上把清單面板收到 peek，避免和詳情面板衝突
+  if (isMobileView && isMobileView()) setSheetSnap('peek');
+  // 面板出現後重新計算地圖尺寸並平移到 marker 使其保持可見
+  setTimeout(() => {
+    if (!STATE.map) return;
+    STATE.map.invalidateSize({ animate: false });
+    const c = getCoords(STATE.view)[item.id];
+    if (c) STATE.map.panTo(c, { animate: true });
+  }, 300);
+  hydrateSheet(item);
+}
+function hideDetailSheet() {
+  const sheet = document.getElementById('detail-sheet');
+  sheet.classList.remove('show');
+  document.getElementById('map-container').classList.remove('sheet-open');
+  setTimeout(() => { if (STATE.map) STATE.map.invalidateSize({ animate: false }); }, 300);
+}
+
+async function hydrateSheet(item) {
+  // 圖片: 使用者上傳 > 官方 CDN > 佔位
+  const imgSlot = document.querySelector(`#detail-sheet .sheet-image[data-item-id="${item.id}"]`);
+  let userUrl = null;
+  try { userUrl = await loadItemImage(item.id); } catch {}
+  const officialUrl = tdrImageUrl(item.id);
+  if (imgSlot) {
+    if (userUrl) {
+      imgSlot.innerHTML = `<img src="${userUrl}" alt="${item.zh}" loading="lazy"><div class="img-badge">自訂</div>`;
+    } else if (officialUrl) {
+      imgSlot.innerHTML = `<img src="${officialUrl}" alt="${item.zh}" loading="lazy" referrerpolicy="no-referrer" onerror="this.parentElement.innerHTML='<div class=\\'no-image\\'>圖片載入失敗</div>'"><div class="img-badge">官方圖</div>`;
+    } else {
+      imgSlot.innerHTML = `<div class="no-image">尚無圖片</div>`;
+    }
+  }
+  // 按鈕 (依據是否已有自訂圖動態調整)
+  const actions = document.querySelector(`#detail-sheet .sheet-actions[data-item-id="${item.id}"]`);
+  if (actions) {
+    const uploadBtn = actions.querySelector('[data-act="upload"]');
+    const removeBtn = actions.querySelector('[data-act="remove-img"]');
+    if (uploadBtn) uploadBtn.textContent = userUrl ? '📷 換張圖' : '📷 自訂上傳';
+    if (removeBtn) removeBtn.style.display = userUrl ? '' : 'none';
+    actions.querySelectorAll('button').forEach(b => {
+      b.onclick = async () => {
+        const act = b.dataset.act;
+        if (act === 'upload') {
+          const inp = document.createElement('input');
+          inp.type = 'file'; inp.accept = 'image/*';
+          inp.onchange = async () => {
+            const f = inp.files[0]; if (!f) return;
+            await saveItemImage(item.id, f);
+            hydrateSheet(item);
+          };
+          inp.click();
+        } else if (act === 'remove-img') {
+          if (!confirm('移除自訂圖片並恢復官方圖？')) return;
+          await deleteItemImage(item.id);
+          hydrateSheet(item);
+        } else if (act === 'edit-note') {
+          const current = itemNote(item);
+          const v = prompt(`備註 (${item.zh})：\n可多行，留空則移除備註`, current);
+          if (v === null) return;
+          const trimmed = v.trim();
+          // 若使用者輸入跟原始 item.note 一樣，或清空，就從覆寫中移除
+          if (trimmed === '' || trimmed === (item.note || '')) {
+            delete STATE.itemNotes[item.id];
+          } else {
+            STATE.itemNotes[item.id] = trimmed;
+          }
+          saveData();
+          // 重新渲染面板
+          document.getElementById('sheet-body').innerHTML = sheetHtml(item);
+          hydrateSheet(item);
+        } else if (act === 'edit-details') {
+          openModal(item.id);
+        } else if (act === 'edit-item') {
+          openModal(item.id);
+        } else if (act === 'delete-item') {
+          if (!confirm(`刪除「${item.zh}」？`)) return;
+          const idx = STATE.userItems.findIndex(u => u.id === item.id);
+          if (idx >= 0) STATE.userItems.splice(idx, 1);
+          Object.values(STATE.coords).forEach(m => delete m[item.id]);
+          await deleteItemImage(item.id);
+          saveData();
+          hideDetailSheet();
+          refreshLayers();
+          renderList();
+        }
+      };
+    });
+  }
+  // 編號徽章點擊
+  document.querySelectorAll(`#detail-sheet [data-edit-num="${item.id}"]`).forEach(el => {
+    el.onclick = (e) => { e.stopPropagation(); promptEditNum(item.id); };
+  });
+}
+
+// 舊 popup 函式的相容包裝 (仍會被某些地方呼叫)
+function hydratePopup(item) { hydrateSheet(item); }
+function sheetHtml(item) {
+  const isAttr = item.category === 'attraction';
+  const area = AREAS[item.area] || { zh: REGIONS[item.region]?.name || '', en: REGIONS[item.region]?.en || '' };
+  const passList = isAttr ? (itemField(item, 'pass') || []) : [];
+  const rainVal = itemField(item, 'rain');
+  const thrillVal = itemField(item, 'thrill');
+  const typeVal = itemField(item, 'type');
+  const durVal = itemField(item, 'duration');
+  const passTags = passList.map(passTagHtml).join('');
+  const rainTag = rainVal ? '<span class="tag rain"><span class="tag-icon">🌧️</span>雨天 OK</span>' : '';
+  const thrillTag = thrillVal ? '<span class="tag thrill">⚠️ 刺激</span>' : '';
+  const catTag = !isAttr ? `<span class="tag" style="background:${item.category === 'shop' ? '#7c3aed' : (item.category === 'dining' ? '#dc2626' : '#0891b2')}">${CATEGORIES[item.category].icon} ${CATEGORIES[item.category].label}</span>` : '';
+  const noteText = itemNote(item);
+  const noteRow = noteText ? `<div class="row"><span class="k">備註</span><span style="white-space:pre-wrap">${escapeHtml(noteText)}</span></div>` : '';
+  const typeRow = isAttr ? `<div class="row"><span class="k">類型</span><span>${typeVal || ''}</span></div><div class="row"><span class="k">耗時</span><span>${durVal || ''}</span></div>` : '';
+  const en = item.en ? `<div class="sheet-alt">${item.en}</div>` : '';
+  const ja = item.ja ? `<div class="sheet-alt">${item.ja}</div>` : '';
+  const userActions = (!isAttr && STATE.mode === 'planning') ? `
+    <button data-act="edit-item" data-id="${item.id}">✏️ 編輯</button>
+    <button data-act="delete-item" data-id="${item.id}" class="danger">🗑️ 刪除</button>` : '';
+  const numDisplay = itemNum(item);
+  const isPlanning = STATE.mode === 'planning';
+  const numHtml = numDisplay
+    ? `<span class="num" ${isPlanning ? `data-edit-num="${item.id}" title="點擊修改編號"` : ''}>${numDisplay}</span>`
+    : (isPlanning ? `<span class="num num-empty" data-edit-num="${item.id}" title="點擊設定編號">+</span>` : '');
+  return `
+    <div class="sheet-image" data-item-id="${item.id}"></div>
+    <div class="sheet-title">
+      ${numHtml}
+      <span>${item.zh}</span>
+    </div>
+    ${en}
+    ${ja}
+    <div class="sheet-meta">
+      <div class="row"><span class="k">區域</span><span>${area.zh} · ${area.en}</span></div>
+      ${typeRow}
+      ${noteRow}
+    </div>
+    <div class="sheet-tags">${catTag}${passTags}${rainTag}${thrillTag}</div>
+  `;
+}
+
+// ============================================================
+// 圖層刷新 (根據目前 view 重畫所有 marker + 路線)
+// ============================================================
+function refreshLayers() {
+  if (!STATE.map) return;
+  STATE.layer.clearLayers();
+
+  // 通用: 畫指定 view 的路線
+  function drawRoutesForView(viewId) {
+    const routes = getRoutes(viewId);
+    routes.forEach(r => {
+      if (r.points.length < 2) return;
+      const isSelected = STATE.selectedRouteId === r.id;
+      const line = L.polyline(r.points, {
+        color: r.color, weight: isSelected ? 6 : 4,
+        opacity: isSelected ? 0.95 : 0.75, dashArray: r.dash || null
+      }).addTo(STATE.layer);
+      line.on('click', e => {
+        STATE.selectedRouteId = r.id;
+        L.DomEvent.stopPropagation(e);
+        renderList(); refreshLayers();
+      });
+    });
+  }
+
+  if (STATE.view === OVERVIEW_ID) {
+    const c = getCoords(OVERVIEW_ID);
+    // 顯示設施標籤 (只顯示已在總覽上放位置的設施)
+    FACILITIES.forEach(f => {
+      if (!c[f.id]) return;
+      const m = L.marker(c[f.id], { icon: itemIcon(f), riseOnHover: true });
+      m.on('click', async (ev) => {
+        L.DomEvent.stopPropagation(ev);
+        STATE.selectedId = f.id;
+        if (STATE.editMode === 'facility') return; // 編輯中不跳區
+        // 跳到該設施所在區域並打開詳情
+        const targetRegion = AREA_TO_REGION[f.area];
+        if (targetRegion && targetRegion !== OVERVIEW_ID) {
+          await goToRegion(targetRegion);
+          setTimeout(() => showDetailSheet(f), 350);
+        } else {
+          showDetailSheet(f);
+        }
+      });
+      if (STATE.editMode === 'facility') {
+        m.on('dblclick', () => {
+          delete c[f.id]; saveData(); refreshLayers(); renderList();
+          updateStatus(`已移除「${f.zh}」的總覽位置。`);
+        });
+      }
+      m.addTo(STATE.layer);
+    });
+    // 交通站點
+    STATE.userItems.filter(u => u.category === 'transit' && u.region === OVERVIEW_ID).forEach(it => {
+      if (!c[it.id]) return;
+      const m = L.marker(c[it.id], { icon: itemIcon(it), riseOnHover: true });
+      m.on('click', () => {
+        STATE.selectedId = it.id;
+        renderList();
+        if (STATE.editMode !== 'facility' && STATE.editMode !== 'route') {
+          showDetailSheet(it);
+        }
+      });
+      if (STATE.editMode === 'facility') {
+        m.on('dblclick', () => {
+          delete c[it.id]; saveData(); refreshLayers(); renderList();
+          updateStatus(`已移除「${it.zh}」的座標。`);
+        });
+      }
+      m.addTo(STATE.layer);
+    });
+    drawRoutesForView(OVERVIEW_ID);
+  } else {
+    // 區域: 顯示區域內的設施 / 購物 / 餐食
+    const c = getCoords(STATE.view);
+    const items = itemsInRegion(STATE.view).filter(shouldShow);
+    items.forEach(it => {
+      if (!c[it.id]) return;
+      const m = L.marker(c[it.id], { icon: itemIcon(it), riseOnHover: true });
+      m.on('click', () => {
+        STATE.selectedId = it.id;
+        renderList();
+        if (STATE.editMode !== 'facility' && STATE.editMode !== 'route') {
+          showDetailSheet(it);
+        }
+      });
+      if (STATE.editMode === 'facility') {
+        m.on('dblclick', () => {
+          delete c[it.id]; saveData(); refreshLayers(); renderList();
+          updateStatus(`已移除「${it.zh}」的座標。`);
+        });
+      }
+      m.addTo(STATE.layer);
+    });
+  }
+}
+
+// ============================================================
+// 篩選
+// ============================================================
+function shouldShow(item) {
+  // 類別
+  if (!STATE.filters.cat.has(item.category)) return false;
+  // Pass 篩選只影響設施
+  if (item.category === 'attraction') {
+    const passes = itemField(item, 'pass') || [];
+    if (passes.length === 0) {
+      if (!STATE.filters.pass.has('none')) return false;
+    } else {
+      if (!passes.some(p => STATE.filters.pass.has(p))) return false;
+    }
+    if (STATE.filters.tag.has('rain') && !itemField(item, 'rain')) return false;
+    if (STATE.filters.tag.has('thrill') && !itemField(item, 'thrill')) return false;
+  }
+  if (STATE.filters.search) {
+    const s = STATE.filters.search.toLowerCase();
+    const hay = ((item.zh||'') + (item.en||'') + (item.ja||'') + (item.num || '')).toLowerCase();
+    if (!hay.includes(s)) return false;
+  }
+  return true;
+}
+
+// ============================================================
+// 側邊列表渲染
+// ============================================================
+function renderList() {
+  const list = document.getElementById('list-container');
+  list.innerHTML = '';
+
+  if (STATE.view === OVERVIEW_ID) {
+    // === 區域清單 ===
+    const title = document.createElement('div');
+    title.className = 'list-section-title';
+    title.textContent = `全部區域 (${Object.keys(REGIONS).length})`;
+    list.appendChild(title);
+    Object.entries(REGIONS).forEach(([rid, r]) => {
+      const facCount = FACILITIES.filter(f => AREA_TO_REGION[f.area] === rid).length;
+      const card = document.createElement('div');
+      card.className = 'region-card';
+      card.innerHTML = `
+        <div class="region-color" style="background:${r.color}"></div>
+        <div class="region-info">
+          <div class="region-name">${r.name}</div>
+          <div class="region-en">${r.en}</div>
+          <div class="region-count">${facCount} 個設施</div>
+        </div>
+        <div class="region-arrow">›</div>
+      `;
+      card.addEventListener('click', () => goToRegion(rid));
+      list.appendChild(card);
+    });
+
+    // === 交通路線 ===
+    const routes = getRoutes(OVERVIEW_ID);
+    if (routes.length > 0 || STATE.editMode === 'route') {
+      const rTitle = document.createElement('div');
+      rTitle.className = 'list-section-title';
+      rTitle.textContent = `🚂 交通路線 (${routes.length})`;
+      list.appendChild(rTitle);
+      routes.forEach(r => {
+        const item = document.createElement('div');
+        item.className = 'route-item' + (STATE.selectedRouteId === r.id ? ' selected' : '');
+        item.innerHTML = `
+          <div class="route-swatch" style="background:${r.color}"></div>
+          <div class="route-name">${r.name}</div>
+          <div class="route-actions">
+            <button data-act="rename">✏️</button>
+            <button data-act="color">🎨</button>
+            <button data-act="delete">🗑️</button>
+          </div>
+        `;
+        item.addEventListener('click', e => {
+          const btn = e.target.closest('button');
+          if (btn) {
+            e.stopPropagation();
+            if (btn.dataset.act === 'rename') {
+              const n = prompt('路線名稱', r.name);
+              if (n) { r.name = n; saveData(); renderList(); }
+            } else if (btn.dataset.act === 'color') {
+              const idx = ROUTE_COLORS.indexOf(r.color);
+              r.color = ROUTE_COLORS[(idx + 1) % ROUTE_COLORS.length];
+              saveData(); renderList(); refreshLayers();
+            } else if (btn.dataset.act === 'delete') {
+              if (confirm(`刪除路線「${r.name}」？`)) {
+                const arr = getRoutes(OVERVIEW_ID);
+                arr.splice(arr.indexOf(r), 1);
+                STATE.selectedRouteId = null;
+                saveData(); renderList(); refreshLayers();
+              }
+            }
+            return;
+          }
+          STATE.selectedRouteId = STATE.selectedRouteId === r.id ? null : r.id;
+          renderList(); refreshLayers();
+        });
+        list.appendChild(item);
+      });
+    }
+
+    // === 編輯模式：設施位置清單 (依區域分組) ===
+    if (STATE.editMode === 'facility') {
+      const c = getCoords(OVERVIEW_ID);
+      const placed = FACILITIES.filter(f => c[f.id]).length;
+      const fTitle = document.createElement('div');
+      fTitle.className = 'list-section-title';
+      fTitle.textContent = `✏️ 標記位置 (${placed}/${FACILITIES.length})`;
+      list.appendChild(fTitle);
+      Object.entries(REGIONS).forEach(([rid, r]) => {
+        const facs = FACILITIES.filter(f => AREA_TO_REGION[f.area] === rid);
+        if (facs.length === 0) return;
+        facs.forEach(it => {
+          const isPlaced = !!c[it.id];
+          const selected = STATE.selectedId === it.id;
+          const el = document.createElement('div');
+          el.className = 'facility' + (isPlaced ? ' placed' : '') + (selected ? ' selected' : '');
+          el.innerHTML = `
+            <div><span class="fac-num">${itemNum(it) || '·'}</span><span class="fac-name">${it.zh}</span></div>
+            <div class="fac-area">${r.name}</div>
+          `;
+          el.addEventListener('click', () => {
+            STATE.selectedId = it.id;
+            renderList();
+            if (isPlaced) {
+              STATE.map.setView(c[it.id], Math.max(STATE.map.getZoom(), 0));
+            }
+            updateStatus(`已選擇「${it.zh}」→ 點地圖標記位置`);
+          });
+          list.appendChild(el);
+        });
+      });
+      return; // 編輯模式下只顯示這個清單
+    }
+
+    // === 全域表演 (無固定位置的節目) ===
+    const parkWide = FACILITIES.filter(f => f.area === 'park-wide');
+    if (parkWide.length > 0) {
+      const pwTitle = document.createElement('div');
+      pwTitle.className = 'list-section-title';
+      pwTitle.textContent = `🎆 園區全域 (${parkWide.length})`;
+      list.appendChild(pwTitle);
+      parkWide.forEach(it => {
+        const selected = STATE.selectedId === it.id;
+        const el = document.createElement('div');
+        el.className = 'facility' + (selected ? ' selected' : '');
+        const numDisp = itemNum(it) || '·';
+        const enLine = it.en ? `<div class="fac-alt">${it.en}</div>` : '';
+        const jaLine = it.ja ? `<div class="fac-alt">${it.ja}</div>` : '';
+        el.innerHTML = `
+          <div><span class="fac-num">${numDisp}</span><span class="fac-name">${it.zh}</span></div>
+          ${enLine}${jaLine}
+        `;
+        el.addEventListener('click', () => {
+          STATE.selectedId = it.id;
+          renderList();
+          showDetailSheet(it);
+        });
+        list.appendChild(el);
+      });
+    }
+
+    // === 站點清單 ===
+    const c = getCoords(OVERVIEW_ID);
+    const stops = STATE.userItems.filter(u => u.category === 'transit' && u.region === OVERVIEW_ID);
+    if (stops.length > 0) {
+      const sTitle = document.createElement('div');
+      sTitle.className = 'list-section-title';
+      const placedStops = stops.filter(s => c[s.id]).length;
+      sTitle.textContent = STATE.mode === 'planning'
+        ? `🚉 站點 (${placedStops}/${stops.length} 已標記)`
+        : `🚉 站點 (${stops.length})`;
+      list.appendChild(sTitle);
+      stops.forEach(it => {
+        const placed = !!c[it.id];
+        const selected = STATE.selectedId === it.id;
+        const el = document.createElement('div');
+        el.className = 'facility' + (placed ? ' placed' : '') + (selected ? ' selected' : '') + ' user-item transit';
+        const enLine = it.en ? `<div class="fac-alt">${it.en}</div>` : '';
+        const jaLine = it.ja ? `<div class="fac-alt">${it.ja}</div>` : '';
+        el.innerHTML = `
+          <div><span class="fac-num">🚉</span><span class="fac-name">${it.zh}</span></div>
+          ${enLine}${jaLine}
+        `;
+        el.addEventListener('click', () => {
+          STATE.selectedId = it.id;
+          renderList();
+          if (c[it.id]) STATE.map.setView(c[it.id], Math.max(STATE.map.getZoom(), 0));
+          if (STATE.editMode === 'facility') {
+            updateStatus(`已選擇「${it.zh}」→ 點地圖標記`);
+          } else {
+            showDetailSheet(it);
+          }
+        });
+        list.appendChild(el);
+      });
+    }
+    return;
+  }
+
+  // Region view: 設施 + 路線
+  const region = REGIONS[STATE.view];
+  const c = getCoords(STATE.view);
+  const facs = FACILITIES.filter(f => AREA_TO_REGION[f.area] === STATE.view);
+  const routes = getRoutes(STATE.view);
+
+  // 路線區塊
+  if (routes.length > 0 || STATE.editMode === 'route') {
+    const rTitle = document.createElement('div');
+    rTitle.className = 'list-section-title';
+    rTitle.textContent = `🚂 路線 (${routes.length})`;
+    list.appendChild(rTitle);
+    routes.forEach(r => {
+      const item = document.createElement('div');
+      item.className = 'route-item' + (STATE.selectedRouteId === r.id ? ' selected' : '');
+      item.innerHTML = `
+        <div class="route-swatch" style="background:${r.color}"></div>
+        <div class="route-name">${r.name}</div>
+        <div class="route-actions">
+          <button data-act="rename">✏️</button>
+          <button data-act="color">🎨</button>
+          <button data-act="delete">🗑️</button>
+        </div>
+      `;
+      item.addEventListener('click', e => {
+        const btn = e.target.closest('button');
+        if (btn) {
+          e.stopPropagation();
+          if (btn.dataset.act === 'rename') {
+            const n = prompt('路線名稱', r.name);
+            if (n) { r.name = n; saveData(); renderList(); }
+          } else if (btn.dataset.act === 'color') {
+            const idx = ROUTE_COLORS.indexOf(r.color);
+            r.color = ROUTE_COLORS[(idx + 1) % ROUTE_COLORS.length];
+            saveData(); renderList(); refreshLayers();
+          } else if (btn.dataset.act === 'delete') {
+            if (confirm(`刪除路線「${r.name}」？`)) {
+              const arr = getRoutes(STATE.view);
+              arr.splice(arr.indexOf(r), 1);
+              STATE.selectedRouteId = null;
+              saveData(); renderList(); refreshLayers();
+            }
+          }
+          return;
+        }
+        STATE.selectedRouteId = STATE.selectedRouteId === r.id ? null : r.id;
+        renderList(); refreshLayers();
+      });
+      list.appendChild(item);
+    });
+  }
+
+  // 更新分類 tabs 計數並自動隱藏空 tab (attraction 永遠顯示)
+  const items = itemsInRegion(STATE.view);
+  ['attraction','shop','dining'].forEach(cat => {
+    const cnt = items.filter(x => x.category === cat).length;
+    const el = document.getElementById('cnt-' + cat);
+    const tab = document.querySelector(`.cat-tab[data-cat="${cat}"]`);
+    if (el) el.textContent = cnt ? ` ${cnt}` : '';
+    if (tab) tab.style.display = (cnt === 0 && cat !== 'attraction') ? 'none' : '';
+  });
+
+  // 項目區塊 (依類別分組顯示，且套用篩選)
+  const filtered = items.filter(shouldShow);
+  const groups = {
+    attraction: filtered.filter(x => x.category === 'attraction'),
+    shop:       filtered.filter(x => x.category === 'shop'),
+    dining:     filtered.filter(x => x.category === 'dining')
+  };
+  ['attraction','shop','dining'].forEach(cat => {
+    if (!STATE.filters.cat.has(cat)) return;
+    const arr = groups[cat];
+    if (arr.length === 0) return;
+    const placedCount = arr.filter(x => c[x.id]).length;
+    const t = document.createElement('div');
+    t.className = 'list-section-title';
+    t.textContent = STATE.mode === 'planning'
+      ? `${CATEGORIES[cat].icon} ${CATEGORIES[cat].label} (${placedCount}/${arr.length} 已標記)`
+      : `${CATEGORIES[cat].icon} ${CATEGORIES[cat].label} (${arr.length})`;
+    list.appendChild(t);
+    arr.forEach(it => {
+      const placed = !!c[it.id];
+      const selected = STATE.selectedId === it.id;
+      const passTags = it.category === 'attraction' ? (itemField(it, 'pass') || []).map(passTagHtml).join('') : '';
+      const rainTag = itemField(it, 'rain') ? '<span class="tag rain">🌧️ 雨天</span>' : '';
+      const thrillTag = itemField(it, 'thrill') ? '<span class="tag thrill">⚠️ 刺激</span>' : '';
+      const el = document.createElement('div');
+      el.className = 'facility' + (placed ? ' placed' : '') + (selected ? ' selected' : '') + (it.category !== 'attraction' ? ' user-item ' + it.category : '');
+      const numVal = itemNum(it);
+      const iconLabel = it.category === 'shop' ? '🛍️' : (it.category === 'dining' ? '🍽️' : (numVal || '·'));
+      const enLine = it.en ? `<div class="fac-alt">${it.en}</div>` : '';
+      const jaLine = it.ja ? `<div class="fac-alt">${it.ja}</div>` : '';
+      const numAttr = it.category === 'attraction' ? `data-edit-num="${it.id}" title="點擊修改編號"` : '';
+      const numExtraCls = it.category === 'attraction' && !numVal ? ' num-empty' : '';
+      el.innerHTML = `
+        <div><span class="fac-num${numExtraCls}" ${numAttr}>${iconLabel}</span><span class="fac-name">${it.zh}</span></div>
+        ${enLine}${jaLine}
+        <div class="fac-tags">${passTags}${rainTag}${thrillTag}</div>
+      `;
+      el.addEventListener('click', (ev) => {
+        // 點編號徽章 → 編輯編號 (規劃模式)
+        const numEl = ev.target.closest('[data-edit-num]');
+        if (numEl && STATE.mode === 'planning') {
+          ev.stopPropagation();
+          promptEditNum(numEl.dataset.editNum);
+          return;
+        }
+        STATE.selectedId = it.id;
+        renderList();
+        if (c[it.id]) {
+          STATE.map.setView(c[it.id], Math.max(STATE.map.getZoom(), 0));
+        }
+        // 無論有沒有座標，觀光模式都直接開資訊面板
+        if (STATE.editMode === 'facility') {
+          updateStatus(`已選擇「${it.zh}」→ 點地圖標記`);
+        } else {
+          showDetailSheet(it);
+        }
+      });
+      list.appendChild(el);
+    });
+  });
+  if (Object.values(groups).every(a => a.length === 0)) {
+    const empty = document.createElement('div');
+    empty.style.cssText = 'padding:20px;text-align:center;color:var(--muted);font-size:12px';
+    empty.textContent = '沒有符合條件的項目';
+    list.appendChild(empty);
+  }
+}
+
+// ============================================================
+// 狀態列
+// ============================================================
+function updateStatus(msg) {
+  const el = document.getElementById('status');
+  const t = document.getElementById('status-text');
+  const h = document.getElementById('status-hint');
+  const a = document.getElementById('status-actions');
+  el.classList.remove('edit','route');
+  a.innerHTML = '';
+
+  if (STATE.editMode === 'facility') {
+    el.classList.add('edit');
+    const sel = STATE.selectedId ? FACILITIES.find(x => x.id === STATE.selectedId) : null;
+    t.textContent = '✏️ 標記設施';
+    h.textContent = sel ? `選擇: ${sel.zh} → 點地圖標記位置` : '從左側點選一個設施，再點地圖標記位置。編輯模式下雙擊圖釘可刪除。';
+  } else if (STATE.editMode === 'route') {
+    el.classList.add('route');
+    if (STATE.drawingRoute) {
+      t.textContent = `🚂 繪製中: ${STATE.drawingRoute.name} (${STATE.drawingRoute.points.length} 點)`;
+      h.textContent = '點地圖新增點。至少 2 點才會存檔。';
+      a.innerHTML = `
+        <button data-act="undo" ${STATE.drawingRoute.points.length === 0 ? 'disabled' : ''}>復原上一點</button>
+        <button data-act="finish" class="primary">完成</button>
+        <button data-act="cancel">取消</button>
+      `;
+    } else {
+      t.textContent = '🚂 畫路線';
+      h.textContent = '按下「新路線」開始繪製。可畫多條，之後在側邊調色/改名。';
+      a.innerHTML = `<button data-act="new" class="primary">＋ 新路線</button>`;
+    }
+    a.querySelectorAll('button').forEach(b => b.addEventListener('click', () => handleRouteAction(b.dataset.act)));
+  } else {
+    t.textContent = STATE.view === OVERVIEW_ID ? '🏰 全園總覽' : `📍 ${REGIONS[STATE.view].name}`;
+    h.textContent = msg || (STATE.view === OVERVIEW_ID
+      ? '點區域按鈕或側邊列表進入該區域'
+      : '點圖釘查看詳情｜點側邊搜尋設施｜按上方按鈕編輯');
+  }
+}
+
+// ============================================================
+// 地圖點擊
+// ============================================================
+function onMapClick(e) {
+  if (STATE.editMode === 'facility') {
+    if (!STATE.selectedId) { updateStatus('請先從左側選一個項目。'); return; }
+    const c = getCoords(STATE.view);
+    c[STATE.selectedId] = [e.latlng.lat, e.latlng.lng];
+    saveData();
+    const it = findItemById(STATE.selectedId);
+    // 決定候選池 (總覽/區域不同)
+    let pool;
+    if (STATE.view === OVERVIEW_ID) {
+      pool = [...FACILITIES, ...STATE.userItems.filter(u => u.region === OVERVIEW_ID)];
+    } else {
+      pool = itemsInRegion(STATE.view);
+    }
+    const remaining = pool.filter(x => !c[x.id]);
+    if (remaining.length > 0) {
+      STATE.selectedId = remaining[0].id;
+      updateStatus(`✅ 已標記「${it ? it.zh : ''}」→ 下一個: ${remaining[0].zh}`);
+    } else {
+      STATE.selectedId = null;
+      updateStatus(`✅ 已標記「${it ? it.zh : ''}」— 全部完成 🎉`);
+    }
+    refreshLayers();
+    renderList();
+  } else if (STATE.editMode === 'route' && STATE.drawingRoute) {
+    STATE.drawingRoute.points.push([e.latlng.lat, e.latlng.lng]);
+    redrawDrawingRoute();
+    updateStatus();
+  }
+}
+
+// ============================================================
+// 路線繪製
+// ============================================================
+function redrawDrawingRoute() {
+  STATE.drawingLayer.clearLayers();
+  if (!STATE.drawingRoute) return;
+  const r = STATE.drawingRoute;
+  if (r.points.length >= 2) {
+    L.polyline(r.points, { color: r.color, weight: 5, opacity: 0.9, dashArray: '8,4' }).addTo(STATE.drawingLayer);
+  }
+  r.points.forEach((p, i) => {
+    L.marker(p, {
+      icon: L.divIcon({
+        className: '',
+        html: `<div class="route-vertex" style="border-color:${r.color}"></div>`,
+        iconSize: [12, 12], iconAnchor: [6, 6]
+      })
+    }).addTo(STATE.drawingLayer);
+  });
+}
+function handleRouteAction(act) {
+  if (act === 'new') {
+    const name = prompt('新路線名稱（例:海洋渡輪航線、電氣化鐵路）', '新路線 ' + (getRoutes(STATE.view).length + 1));
+    if (!name) return;
+    const color = ROUTE_COLORS[getRoutes(STATE.view).length % ROUTE_COLORS.length];
+    STATE.drawingRoute = { id: 'r' + Date.now(), name, color, points: [] };
+    updateStatus();
+  } else if (act === 'undo') {
+    if (STATE.drawingRoute && STATE.drawingRoute.points.length > 0) {
+      STATE.drawingRoute.points.pop();
+      redrawDrawingRoute();
+      updateStatus();
+    }
+  } else if (act === 'finish') {
+    if (!STATE.drawingRoute || STATE.drawingRoute.points.length < 2) {
+      alert('至少需要 2 個點才能存檔。');
+      return;
+    }
+    getRoutes(STATE.view).push({
+      id: STATE.drawingRoute.id,
+      name: STATE.drawingRoute.name,
+      color: STATE.drawingRoute.color,
+      points: STATE.drawingRoute.points
+    });
+    STATE.drawingRoute = null;
+    STATE.drawingLayer.clearLayers();
+    saveData();
+    refreshLayers();
+    renderList();
+    updateStatus();
+  } else if (act === 'cancel') {
+    STATE.drawingRoute = null;
+    STATE.drawingLayer.clearLayers();
+    updateStatus();
+  }
+}
+
+// ============================================================
+// 視圖切換
+// ============================================================
+async function goToRegion(regionId) {
+  STATE.view = regionId;
+  STATE.selectedId = null;
+  STATE.selectedRouteId = null;
+  hideDetailSheet();
+  updateViewChrome();
+  renderList();
+  closeSidebar();
+  if (location.hash !== '#/region/' + regionId) history.replaceState(null, '', '#/region/' + regionId);
+  await loadCurrentView();
+}
+async function goToOverview() {
+  STATE.view = OVERVIEW_ID;
+  STATE.selectedId = null;
+  STATE.selectedRouteId = null;
+  hideDetailSheet();
+  updateViewChrome();
+  renderList();
+  closeSidebar();
+  if (location.hash) history.replaceState(null, '', location.pathname + location.search);
+  await loadCurrentView();
+}
+function updateViewChrome() {
+  const back = document.getElementById('btn-back');
+  const subtitle = document.getElementById('subtitle');
+  const overviewCtrl = document.getElementById('controls-overview');
+  const regionCtrl = document.getElementById('controls-region');
+  const legend = document.getElementById('legend');
+  if (STATE.view === OVERVIEW_ID) {
+    back.classList.remove('show');
+    subtitle.textContent = '全園總覽';
+    overviewCtrl.style.display = '';
+    regionCtrl.style.display = 'none';
+    legend.style.display = 'none';
+  } else {
+    back.classList.add('show');
+    const r = REGIONS[STATE.view];
+    subtitle.textContent = `${r.name} · ${r.en}`;
+    overviewCtrl.style.display = 'none';
+    regionCtrl.style.display = '';
+    legend.style.display = '';
+  }
+}
+async function loadCurrentView() {
+  if (STATE.map) { STATE.map.remove(); STATE.map = null; }
+  const loading = document.getElementById('loading-view');
+  if (loading) loading.style.display = 'flex';
+  const url = urlForView(STATE.view);
+  if (!url) {
+    document.getElementById('status-text').textContent = '沒有配置圖片 URL';
+    if (loading) loading.style.display = 'none';
+    return;
+  }
+  try {
+    const img = new Image();
+    await new Promise((resolve, reject) => {
+      img.onload = resolve;
+      img.onerror = reject;
+      img.src = url;
+    });
+    initMap({ url, width: img.naturalWidth, height: img.naturalHeight });
+  } catch (e) {
+    console.error('地圖載入失敗:', e);
+    document.getElementById('status-text').textContent = '⚠️ 地圖載入失敗';
+    document.getElementById('status-hint').textContent = url;
+  }
+  if (loading) loading.style.display = 'none';
+}
+
+// ============================================================
+// 編輯設施編號
+// ============================================================
+function promptEditNum(itemId) {
+  const it = findItemById(itemId);
+  if (!it) return;
+  const current = itemNum(it);
+  const v = prompt(`「${it.zh}」的編號 (留空移除)：`, current);
+  if (v === null) return;
+  const clean = String(v).trim();
+  if (clean === '') delete STATE.itemNums[itemId];
+  else STATE.itemNums[itemId] = clean;
+  saveData();
+  refreshLayers();
+  renderList();
+  // 若底部面板正在顯示這個項目，重新渲染
+  const sheet = document.getElementById('detail-sheet');
+  if (sheet.classList.contains('show') && STATE.selectedId === itemId) {
+    document.getElementById('sheet-body').innerHTML = sheetHtml(it);
+    hydrateSheet(it);
+  }
+}
+
+// ============================================================
+// 新增 / 編輯項目 modal
+// ============================================================
+const MODAL = {
+  editingId: null,   // 若非 null 表示編輯現有項目
+  category: 'shop'
+};
+function openModal(editingId, defaultCat) {
+  MODAL.editingId = editingId || null;
+  const backdrop = document.getElementById('modal-backdrop');
+  const title = document.getElementById('modal-title');
+  const catButtons = document.querySelectorAll('#modal .cat-picker button');
+  const zh = document.getElementById('item-name-zh');
+  const ja = document.getElementById('item-name-ja');
+  const en = document.getElementById('item-name-en');
+  const note = document.getElementById('item-note');
+  const typeInp = document.getElementById('item-type');
+  const durInp = document.getElementById('item-duration');
+  const rainInp = document.getElementById('item-rain');
+  const thrillInp = document.getElementById('item-thrill');
+  const catPicker = document.getElementById('modal-cat-picker');
+  const nameFields = document.getElementById('modal-name-fields');
+  const attrFields = document.getElementById('modal-attr-fields');
+  const resetBtn = document.getElementById('modal-reset');
+
+  // 判斷編輯什麼: 硬編設施 vs 使用者項目
+  const facility = editingId ? FACILITIES.find(f => f.id === editingId) : null;
+  const userIt = editingId ? STATE.userItems.find(u => u.id === editingId) : null;
+  MODAL.isAttraction = !!facility;
+
+  if (facility) {
+    // 編輯硬編設施 — 只顯示詳情欄位
+    title.textContent = '🔧 編輯詳情 · ' + facility.zh;
+    catPicker.style.display = 'none';
+    nameFields.style.display = 'none';
+    attrFields.style.display = '';
+    resetBtn.style.display = '';
+    typeInp.value = itemField(facility, 'type') || '';
+    durInp.value = itemField(facility, 'duration') || '';
+    const passArr = itemField(facility, 'pass') || [];
+    ['dpa','pp','er'].forEach(p => {
+      document.getElementById('item-pass-' + p).checked = passArr.includes(p);
+    });
+    rainInp.checked = !!itemField(facility, 'rain');
+    thrillInp.checked = !!itemField(facility, 'thrill');
+    note.value = itemNote(facility);
+    MODAL.category = 'attraction';
+  } else if (userIt) {
+    // 編輯使用者項目 (shop/dining/transit)
+    title.textContent = '✏️ 編輯項目';
+    catPicker.style.display = '';
+    nameFields.style.display = '';
+    attrFields.style.display = 'none';
+    resetBtn.style.display = 'none';
+    MODAL.category = userIt.category;
+    zh.value = userIt.zh || ''; ja.value = userIt.ja || ''; en.value = userIt.en || '';
+    note.value = itemNote(userIt);
+  } else {
+    // 新增
+    title.textContent = '➕ 新增項目';
+    catPicker.style.display = '';
+    nameFields.style.display = '';
+    attrFields.style.display = 'none';
+    resetBtn.style.display = 'none';
+    MODAL.category = defaultCat || (STATE.view === OVERVIEW_ID ? 'transit' : 'shop');
+    zh.value = ''; ja.value = ''; en.value = ''; note.value = '';
+  }
+  catButtons.forEach(b => b.classList.toggle('on', b.dataset.cat === MODAL.category));
+  updateModalSave();
+  backdrop.classList.add('show');
+  if (facility) typeInp.focus(); else zh.focus();
+}
+function closeModal() {
+  document.getElementById('modal-backdrop').classList.remove('show');
+}
+function updateModalSave() {
+  const btn = document.getElementById('modal-save');
+  if (MODAL.isAttraction) {
+    btn.disabled = false;   // 設施編輯任何欄位都可儲存
+  } else {
+    const zh = document.getElementById('item-name-zh').value.trim();
+    btn.disabled = !zh;
+  }
+}
+function saveModalItem() {
+  const note = document.getElementById('item-note').value;
+  // 硬編設施編輯 → 存到 itemOverrides
+  if (MODAL.isAttraction && MODAL.editingId) {
+    const type = document.getElementById('item-type').value.trim();
+    const duration = document.getElementById('item-duration').value.trim();
+    const pass = ['dpa','pp','er'].filter(p => document.getElementById('item-pass-' + p).checked);
+    const rain = document.getElementById('item-rain').checked;
+    const thrill = document.getElementById('item-thrill').checked;
+    STATE.itemOverrides[MODAL.editingId] = { type, duration, pass, rain, thrill };
+    // 備註同步存到 itemNotes
+    const origNote = FACILITIES.find(f => f.id === MODAL.editingId)?.note || '';
+    if (!note.trim() || note.trim() === origNote) delete STATE.itemNotes[MODAL.editingId];
+    else STATE.itemNotes[MODAL.editingId] = note.trim();
+    saveData();
+    closeModal();
+    refreshLayers();
+    renderList();
+    // 若面板顯示這項，重新渲染
+    const sheet = document.getElementById('detail-sheet');
+    if (sheet.classList.contains('show') && STATE.selectedId === MODAL.editingId) {
+      const it = FACILITIES.find(f => f.id === MODAL.editingId);
+      document.getElementById('sheet-body').innerHTML = sheetHtml(it);
+      hydrateSheet(it);
+    }
+    return;
+  }
+
+  const zh = document.getElementById('item-name-zh').value.trim();
+  if (!zh) return;
+  const ja = document.getElementById('item-name-ja').value.trim();
+  const en = document.getElementById('item-name-en').value.trim();
+  if (MODAL.editingId) {
+    const it = STATE.userItems.find(u => u.id === MODAL.editingId);
+    if (it) {
+      it.category = MODAL.category; it.zh = zh; it.ja = ja; it.en = en; it.note = note.trim();
+    }
+    saveData();
+    closeModal();
+    refreshLayers();
+    renderList();
+  } else {
+    // 新增：transit 只能在總覽; shop/dining 在該區域
+    const region = MODAL.category === 'transit' ? OVERVIEW_ID : STATE.view;
+    const item = {
+      id: 'u' + Date.now() + Math.random().toString(36).slice(2, 6),
+      category: MODAL.category,
+      region,
+      zh, ja, en, note
+    };
+    STATE.userItems.push(item);
+    saveData();
+    closeModal();
+    // 進入放置模式，選擇這個新項目
+    STATE.editMode = 'facility';
+    STATE.selectedId = item.id;
+    updateModeButtons();
+    renderList();
+    refreshLayers();
+    updateStatus(`✅ 已新增「${zh}」→ 點地圖標記位置`);
+  }
+}
+
+// ============================================================
+// 按鈕 / 事件
+// ============================================================
+function updateModeButtons() {
+  const bf = document.getElementById('btn-edit-facility');
+  const bfOv = document.getElementById('btn-edit-facility-ov');
+  const br = document.getElementById('btn-edit-route');
+  const brOv = document.getElementById('btn-edit-route-ov');
+  if (bf)   bf.classList.toggle('active', STATE.editMode === 'facility');
+  if (bfOv) bfOv.classList.toggle('active', STATE.editMode === 'facility');
+  if (br)   br.classList.toggle('active', STATE.editMode === 'route');
+  if (brOv) brOv.classList.toggle('active', STATE.editMode === 'route');
+}
+
+function setMode(mode) {
+  // 切換模式時清空繪製中的路線
+  if (STATE.drawingRoute) { STATE.drawingRoute = null; STATE.drawingLayer && STATE.drawingLayer.clearLayers(); }
+  STATE.editMode = STATE.editMode === mode ? 'off' : mode;
+  STATE.selectedId = null;
+  updateModeButtons();
+  updateStatus();
+  refreshLayers();
+  renderList();
+}
+
+function exportData() {
+  const json = JSON.stringify({ coords: STATE.coords, routes: STATE.routes }, null, 2);
+  const win = window.open('', '_blank', 'width=700,height=600');
+  win.document.write(`
+    <html><head><title>資料匯出</title>
+    <style>body{font-family:monospace;padding:20px;background:#f7f9fc;color:#1e293b;}
+    textarea{width:100%;height:75%;background:#fff;color:#1e293b;border:1px solid #cbd5e1;padding:10px;border-radius:6px;font-family:monospace;font-size:12px;}
+    button{background:#0077cc;color:#fff;border:none;padding:8px 16px;border-radius:6px;cursor:pointer;margin-top:8px;font-size:13px;}
+    p{color:#64748b;font-size:12px;}</style></head><body>
+    <h3>座標 + 路線資料</h3>
+    <p>複製後可以貼回主檔案的 localStorage["tds-data-v2"] 或用「📥 匯入」按鈕還原。</p>
+    <textarea id="ta" readonly>${json}</textarea><br>
+    <button onclick="document.getElementById('ta').select();document.execCommand('copy');this.textContent='✓ 已複製'">複製到剪貼簿</button>
+    </body></html>
+  `);
+}
+function importData() {
+  const text = prompt('貼上完整資料 JSON:');
+  if (!text) return;
+  try {
+    const obj = JSON.parse(text);
+    STATE.coords = obj.coords || {};
+    STATE.routes = obj.routes || {};
+    saveData();
+    refreshLayers();
+    renderList();
+    updateStatus('已匯入');
+  } catch (e) {
+    alert('JSON 格式錯誤: ' + e.message);
+  }
+}
+
+function bindEvents() {
+  // 過濾晶片 (事件委派)
+  document.getElementById('sidebar').addEventListener('click', e => {
+    const el = e.target.closest('.filter-chip');
+    if (!el) return;
+    const type = el.dataset.filter;
+    const val = el.dataset.val;
+    const set = STATE.filters[type];
+    if (set.has(val)) { set.delete(val); el.classList.remove('on'); }
+    else { set.add(val); el.classList.add('on'); }
+    refreshLayers();
+    renderList();
+  });
+
+  document.getElementById('search').addEventListener('input', e => {
+    STATE.filters.search = e.target.value.trim();
+    refreshLayers();
+    renderList();
+  });
+
+  document.getElementById('btn-back').addEventListener('click', () => goToOverview());
+  document.getElementById('title').addEventListener('click', () => goToOverview());
+
+  // 分類 tabs
+  document.getElementById('cat-tabs').addEventListener('click', e => {
+    const tab = e.target.closest('.cat-tab');
+    if (!tab) return;
+    const cat = tab.dataset.cat;
+    if (STATE.filters.cat.has(cat) && STATE.filters.cat.size === 1) return;
+    if (STATE.filters.cat.has(cat)) { STATE.filters.cat.delete(cat); tab.classList.remove('on'); }
+    else { STATE.filters.cat.add(cat); tab.classList.add('on'); }
+    refreshLayers();
+    renderList();
+  });
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') hideDetailSheet();
+  });
+
+  window.closeSidebar = function() {
+    if (isMobileView()) setSheetSnap('peek');
+  };
+  document.querySelector('#detail-sheet .sheet-close').addEventListener('click', hideDetailSheet);
+}
+
+// ============================================================
+// 靜態 UI (chips + legend)
+// ============================================================
+function renderStaticUi() {
+  const passRow = document.getElementById('chip-row-pass');
+  ['dpa','pp','er'].forEach(k => {
+    const chip = document.createElement('span');
+    chip.className = `filter-chip ${k} on`;
+    chip.dataset.filter = 'pass';
+    chip.dataset.val = k;
+    chip.title = `${k.toUpperCase()} · ${PASS_LABEL[k]}`;
+    chip.innerHTML = `<span class="chip-icon">${PASS_ICONS[k]}</span>`;
+    passRow.appendChild(chip);
+  });
+
+  const legend = document.getElementById('legend');
+  legend.innerHTML = '';
+  ['dpa','pp','er'].forEach(k => {
+    const row = document.createElement('div');
+    row.className = 'row';
+    row.title = PASS_LABEL[k];
+    row.innerHTML = `<div class="legend-icon ${k}">${PASS_ICONS[k]}</div><b>${k.toUpperCase()}</b>`;
+    legend.appendChild(row);
+  });
+}
+
+// ============================================================
+// 啟動
+// ============================================================
+function applyMode() {
+  document.body.classList.toggle('mode-planning', STATE.mode === 'planning');
+  const btn = document.getElementById('btn-mode');
+  if (btn) btn.textContent = STATE.mode === 'planning' ? '⚙️ 規劃' : '🎡 觀光';
+}
+
+// ============================================================
+// 手機底部面板 - 三段 snap (peek / half / full)
+// ============================================================
+function isMobileView() { return window.matchMedia('(max-width: 768px)').matches; }
+
+function setSheetSnap(name) {
+  const sidebar = document.getElementById('sidebar');
+  sidebar.style.transform = '';
+  sidebar.classList.remove('snap-half', 'snap-full');
+  if (name === 'half') sidebar.classList.add('snap-half');
+  else if (name === 'full') sidebar.classList.add('snap-full');
+  STATE.sheetSnap = name;
+}
+
+function initBottomSheet() {
+  const sidebar = document.getElementById('sidebar');
+  const handle = sidebar.querySelector('.sheet-drag-handle');
+  if (!handle) return;
+
+  const snapPositions = () => {
+    const vh = window.innerHeight;
+    return { peek: vh - 80, half: vh * 0.5, full: vh * 0.1 };
+  };
+  const nearest = (currentTop) => {
+    const p = snapPositions();
+    let best = 'peek', bestDist = Infinity;
+    for (const k in p) {
+      const d = Math.abs(p[k] - currentTop);
+      if (d < bestDist) { bestDist = d; best = k; }
+    }
+    return best;
+  };
+
+  let drag = null;
+
+  handle.addEventListener('pointerdown', (e) => {
+    if (!isMobileView()) return;
+    drag = {
+      startY: e.clientY,
+      startTop: sidebar.getBoundingClientRect().top,
+      moved: false,
+      pointerId: e.pointerId
+    };
+    sidebar.classList.add('dragging');
+    document.body.classList.add('no-select');
+    try { handle.setPointerCapture(e.pointerId); } catch {}
+  });
+
+  handle.addEventListener('pointermove', (e) => {
+    if (!drag) return;
+    const dy = e.clientY - drag.startY;
+    if (Math.abs(dy) > 4) drag.moved = true;
+    const vh = window.innerHeight;
+    const newTop = Math.max(vh * 0.1, Math.min(vh - 60, drag.startTop + dy));
+    // 直接用 transform 對應 top
+    sidebar.style.transform = `translateY(${newTop}px)`;
+  });
+
+  const endDrag = (e) => {
+    if (!drag) return;
+    sidebar.classList.remove('dragging');
+    document.body.classList.remove('no-select');
+    const currentTop = sidebar.getBoundingClientRect().top;
+    if (drag.moved) {
+      setSheetSnap(nearest(currentTop));
+    } else {
+      // Tap → 循環
+      const order = ['peek', 'half', 'full'];
+      const idx = order.indexOf(STATE.sheetSnap);
+      setSheetSnap(order[(idx + 1) % order.length]);
+    }
+    drag = null;
+  };
+  handle.addEventListener('pointerup', endDrag);
+  handle.addEventListener('pointercancel', endDrag);
+
+  // 視窗尺寸變化：重設 sheet 位置避免跑掉
+  window.addEventListener('resize', () => {
+    if (isMobileView()) setSheetSnap(STATE.sheetSnap);
+    else { sidebar.style.transform = ''; sidebar.classList.remove('snap-half', 'snap-full'); }
+  });
+
+  // 初始 peek
+  if (isMobileView()) setSheetSnap('peek');
+}
+
+async function bootstrap() {
+  loadData();
+  STATE.mode = 'tourist';        // 觀看版永遠鎖定觀光模式
+  renderStaticUi();
+  bindEvents();
+  initBottomSheet();
+  updateViewChrome();
+  renderList();
+  // 支援 URL hash 直接跳區域 (例:#/region/mediterranean)
+  const hash = location.hash.slice(1);
+  const m = hash.match(/^\/region\/(.+)$/);
+  if (m && REGIONS[m[1]]) {
+    STATE.view = m[1];
+    updateViewChrome();
+    renderList();
+  }
+  await loadCurrentView();
+  // 導航變化時更新 hash
+  window.addEventListener('hashchange', () => {
+    const h = location.hash.slice(1);
+    const mm = h.match(/^\/region\/(.+)$/);
+    if (mm && REGIONS[mm[1]] && STATE.view !== mm[1]) goToRegion(mm[1]);
+    else if (!mm && STATE.view !== OVERVIEW_ID) goToOverview();
+  });
+}
+bootstrap();
+</script>
+</body>
+</html>
