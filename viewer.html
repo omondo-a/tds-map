@@ -1090,13 +1090,13 @@ const EMBEDDED_DATA = /* EMBEDDED_DATA_START */ {
       {
         "id": "r1786093938549",
         "name": "渡輪航線",
-        "color": "#8e44ad",
+        "color": "#7c3aed",
         "points": [[1096.75, 1301.5], [1282.875, 631.625]]
       },
       {
         "id": "r1786094030945",
         "name": "電氣化鐵路",
-        "color": "#8e44ad",
+        "color": "#7c3aed",
         "points": [[887.4458095707806, 604.5631670895084], [1733.625, 1225.625]]
       }
     ]
@@ -1360,8 +1360,13 @@ function initMap({ url, width, height }) {
   });
   const bounds = [[0, 0], [height, width]];
   L.imageOverlay(url, bounds).addTo(map);
-  // 初始視野: 靠齊左下角 (大門口), 放大到看不見外部底色
-  map.fitBounds([[0, 0], [height * 0.55, width * 0.6]]);
+  // 初始視野: 依螢幕比例動態計算, 靠齊左下角, 塞滿螢幕不留白邊
+  const vpAspect = window.innerWidth / window.innerHeight;  // 手機直 ~0.46, 桌面 ~1.7
+  let bW = width * 0.55;
+  let bH = bW / vpAspect;
+  if (bH > height) { bH = height; bW = bH * vpAspect; }
+  if (bW > width)  { bW = width;  bH = bW / vpAspect; }
+  map.fitBounds([[0, 0], [bH, bW]]);
   map.setMaxBounds([[-height * 0.1, -width * 0.1], [height * 1.1, width * 1.1]]);
   STATE.map = map;
   STATE.imageBounds = bounds;
@@ -1622,16 +1627,13 @@ function refreshLayers() {
     const routes = getRoutes(viewId);
     routes.forEach(r => {
       if (r.points.length < 2) return;
-      const isSelected = STATE.selectedRouteId === r.id;
-      const line = L.polyline(r.points, {
-        color: r.color, weight: isSelected ? 6 : 4,
-        opacity: isSelected ? 0.95 : 0.75, dashArray: r.dash || null
+      L.polyline(r.points, {
+        color: r.color,
+        weight: 3,
+        opacity: 1,                 // 純色不透明
+        dashArray: r.dash || null,
+        interactive: false
       }).addTo(STATE.layer);
-      line.on('click', e => {
-        STATE.selectedRouteId = r.id;
-        L.DomEvent.stopPropagation(e);
-        renderList(); refreshLayers();
-      });
     });
   }
 
