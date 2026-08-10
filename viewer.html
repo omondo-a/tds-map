@@ -447,6 +447,14 @@
   }
   /* 目前只有「設施」一個分類, 隱藏分類 tab */
   .cat-tabs { display: none !important; }
+
+  /* ============ 極簡模式: 只有一張地圖 ============ */
+  /* 隱藏側邊欄、清單按鈕、返回總覽按鈕 (單一地圖不需要導航) */
+  #sidebar { display: none !important; }
+  .fab-toggle { display: none !important; }
+  .fab-return { display: none !important; }
+  #app { display: block; height: 100vh; }
+  #map-container { width: 100vw; height: 100vh; flex: none; }
   /* 底部面板開啟時把圖例往上推 */
   #map-container.sheet-open #legend {
     bottom: calc(min(55vh, 480px) + 12px);
@@ -632,30 +640,9 @@
     }
     .btn-close-list:hover { color: var(--text); }
 
-    /* 清單開關按鈕 (只手機) */
-    .fab-toggle {
-      display: flex !important;
-      position: fixed;
-      bottom: 20px; right: 16px;
-      width: 60px; height: 60px;
-      border-radius: 50%;
-      background: var(--accent);
-      color: #fff;
-      border: none;
-      align-items: center; justify-content: center;
-      font-size: 22px;
-      box-shadow: 0 6px 18px rgba(0, 119, 204, 0.35), 0 2px 6px rgba(0, 0, 0, 0.15);
-      cursor: pointer;
-      z-index: 900;
-      transition: transform 0.2s, box-shadow 0.2s, opacity 0.2s;
-    }
-    .fab-toggle:active { transform: scale(0.94); }
-    .fab-toggle .icon-close { display: none; }
-    /* 清單/詳情開啟時 toggle 按鈕淡出 */
-    body.list-open .fab-toggle,
-    body.detail-open .fab-toggle { opacity: 0; pointer-events: none; }
-    /* 詳情開啟時, 返回按鈕淡出避免重疊 */
-    body.detail-open .fab-return { opacity: 0; pointer-events: none; }
+    /* 清單開關按鈕、返回按鈕 - 極簡模式全部隱藏 */
+    .fab-toggle { display: none !important; }
+    .fab-return { display: none !important; }
 
     /* 手機返回按鈕 (較緊湊) */
     .fab-return {
@@ -1043,13 +1030,6 @@ async function idbDelete(key) {
 const EMBEDDED_DATA = /* EMBEDDED_DATA_START */ {
   "coords": {
     "_overview": {
-      "mediterranean": [1697, 1920],
-      "american": [2022, 1356],
-      "fantasy-springs": [3055, 3127],
-      "port-discovery": [2384, 1691],
-      "lost-river": [2758, 2227],
-      "mermaid-mysterious": [2150, 2045],
-      "arabian": [2026, 2744],
       "med-gondola": [744.1933274995374, 968.7126703722791],
       "med-soaring": [1078.8701007705158, 1694.4062767362348],
       "med-steamer": [1098.2107183213511, 1308.4348221347798],
@@ -1078,67 +1058,15 @@ const EMBEDDED_DATA = /* EMBEDDED_DATA_START */ {
       "ar-jasmine": [1824.2437144141743, 2335.6027738653443],
       "ar-sindbad": [1732.6747665589646, 2377.2250228904395],
       "ar-lamp": [1360.452939563113, 2184.573470259999],
-      "me-scuttle": [1523.3743143184859, 1842.081821139215],
-      "me-flounder": [1704.1337957988994, 1848.0278567142286],
-      "me-ariel": [1610.789247542955, 1651.801440851775],
-      "me-jelly": [1623.517169604313, 1683.6212460051695],
-      "me-blowfish": [1634.8308781032977, 1714.0268375961912],
-      "me-theater": [1644.7303730399094, 1741.6040020624664],
-      "me-whirlpool": [1662.5115467738042, 1770.7293942390518],
       "my-journey": [1412.7780526232327, 1274.830027282917],
-      "my-20k": [1334.290383033053, 1422.2917095432545]
-    },
-    "mediterranean": {
-      "med-gondola": [230, 161],
-      "med-soaring": [563, 889],
-      "med-steamer": [583, 500],
-      "med-fortress": [828, 307],
-      "med-leonardo": [777, 309],
-      "med-believe": [476.5, 355.5]
-    },
-    "american": {
-      "am-turtle": [524.7193631183179, 173.2246615422652],
-      "am-tot": [282.84271247461896, 169.70562748477138],
-      "am-railway": [360.6244584051392, 499.2173875177025],
-      "am-steamer": [767.9179643685906, 521.8448045156721],
-      "am-toystory": [72.12489168102785, 349.31074990615446],
-      "am-bigcity": [538.8153672641491, 476.589970519733],
-      "am-dance": [403, 423],
-      "am-duffy": [870, 694]
-    },
-    "fantasy-springs": {
-      "fs-peterpan": [415, 267.5],
-      "fs-tinker": [543.4676515562436, 379.35706968586805],
-      "fs-frozen": [469.73681042607484, 797.9579741668259],
-      "fs-rapunzel": [247.355079920566, 504.2238167611538]
-    },
-    "port-discovery": {
-      "pd-nemo": [299.0855894231844, 417.4116973659551],
-      "pd-aqua": [84.4337051651932, 313.35607480321704],
-      "pd-railway": [166.48899610038094, 577.3600543338212]
-    },
-    "lost-river": {
-      "lr-indy": [210.48965935548165, 450.7094965860313],
-      "lr-steamer": [91.56894785520953, 407.303436888432],
-      "lr-raging": [206.3274344529721, 831.2557733869021],
-      "lr-dreams": [89, 54.5]
-    },
-    "arabian": {
-      "ar-caravan": [152.20225116092234, 76.94202199571488],
-      "ar-jasmine": [609, 345],
-      "ar-sindbad": [518, 385],
-      "ar-lamp": [144, 195]
-    },
-    "mermaid-mysterious": {
-      "me-ariel": [399.5735906409143, 1322.3983118830258],
-      "me-jelly": [329.41037085575374, 1064.3403679274354],
-      "me-scuttle": [456, 799],
-      "me-flounder": [643, 805],
-      "me-blowfish": [501, 1127],
-      "me-theater": [484, 1011],
-      "me-whirlpool": [281.4284989122459, 1209.1525958289963],
-      "my-journey": [347.89653634378135, 231.93102422918759],
-      "my-20k": [268.70057685088807, 379.00923471598946]
+      "my-20k": [1334.290383033053, 1422.2917095432545],
+      "me-scuttle": [1519.9260261604838, 1844.1344853345158],
+      "me-flounder": [1707.7014171439075, 1849.2170638292314],
+      "me-jelly": [814.5870119269027, 2308.7036405740773],
+      "me-ariel": [885.2976900455575, 2565.383402144794],
+      "me-blowfish": [988.2311125672612, 2371.278987315426],
+      "me-theater": [969.798402284719, 2257.115104275165],
+      "me-whirlpool": [771, 2452.5]
     }
   },
   "routes": {
@@ -1682,15 +1610,8 @@ function refreshLayers() {
       m.on('click', async (ev) => {
         L.DomEvent.stopPropagation(ev);
         STATE.selectedId = f.id;
-        if (STATE.editMode === 'facility') return; // 編輯中不跳區
-        // 跳到該設施所在區域並打開詳情
-        const targetRegion = AREA_TO_REGION[f.area];
-        if (targetRegion && targetRegion !== OVERVIEW_ID) {
-          await goToRegion(targetRegion);
-          setTimeout(() => showDetailSheet(f), 350);
-        } else {
-          showDetailSheet(f);
-        }
+        // 直接彈出詳情面板 (不再導航到區域)
+        showDetailSheet(f);
       });
       if (STATE.editMode === 'facility') {
         m.on('dblclick', () => {
