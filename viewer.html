@@ -105,12 +105,16 @@
   }
   .filter-chip[data-val="none"].on { color: #fff; background: var(--none); border-color: var(--none); }
 
+  /* Pass 群組 + 屬性同列排版 */
+  #chip-row-all { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .chip-inline { display: inline-flex; align-items: center; gap: 6px; }
+
   /* 屬性 tag 篩選 (雨天、刺激) - 較大的膠囊按鈕 */
   .filter-chip[data-filter="tag"] {
-    padding: 8px 16px;
-    font-size: 13px;
+    padding: 6px 12px;
+    font-size: 12px;
     font-weight: 600;
-    gap: 6px;
+    gap: 4px;
   }
   .filter-chip[data-val="rain"] {
     color: #0ea5e9; border-color: #0ea5e9;
@@ -543,70 +547,149 @@
   #modal .actions .save { background: var(--accent); color: #fff; border: none; }
   #modal .actions .save:disabled { opacity: 0.5; cursor: not-allowed; }
 
-  /* 手機切換按鈕 (預設隱藏) */
+  /* ============ 浮動按鈕: 返回總覽 (桌面+手機都有) ============ */
+  .fab-return {
+    position: fixed;
+    top: 14px; left: 14px;
+    z-index: 950;
+    display: none;                                /* 只在區域頁顯示, JS 切換 */
+    align-items: center; gap: 6px;
+    padding: 9px 16px 9px 12px;
+    background: rgba(255, 255, 255, 0.95);
+    color: var(--accent);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    font-size: 14px; font-weight: 700;
+    letter-spacing: 0.3px;
+    cursor: pointer;
+    box-shadow: 0 3px 10px rgba(15, 23, 42, 0.12);
+    backdrop-filter: blur(6px);
+    transition: transform 0.15s, box-shadow 0.15s;
+  }
+  .fab-return.show { display: inline-flex; }
+  /* 桌面版側邊欄有自己的返回按鈕, FAB 移到地圖區左上以免撞到 */
+  @media (min-width: 769px) {
+    .fab-return { left: 396px; }               /* 側邊欄 380px + 邊距 */
+  }
+  .fab-return:hover { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(15, 23, 42, 0.18); }
+  .fab-return:active { transform: translateY(0); }
+
+  /* ============ 浮動按鈕: 開關清單 (只有手機顯示) ============ */
+  .fab-toggle { display: none; }
+
+  /* 桌面上關閉清單的 X 按鈕不顯示 (清單本來就在) */
+  .btn-close-list { display: none; }
+
+  /* 舊按鈕 (現在無用) */
   #mobile-toggle { display: none; }
   #sidebar-backdrop { display: none; }
 
   /* ============ 手機版：側邊欄變底部三段面板 ============ */
   @media (max-width: 768px) {
     #app { flex-direction: column; }
+    /* 手機側邊欄: 50vh 底部抽屜, 用按鈕開關 */
     #sidebar {
       position: fixed;
       left: 0; right: 0; bottom: 0;
       top: auto;
       width: 100%; max-width: none;
-      height: 90vh;
+      height: 50vh;
       z-index: 1000;
       border-top-left-radius: 20px;
       border-top-right-radius: 20px;
       border-right: none;
-      box-shadow: 0 -6px 24px rgba(0, 0, 0, 0.12);
-      transform: translateY(calc(100% - 96px));
-      transition: transform 0.32s cubic-bezier(0.32, 0.72, 0, 1);
+      box-shadow: 0 -6px 24px rgba(0, 0, 0, 0.15);
+      transform: translateY(100%);                  /* 預設收起 */
+      transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1);
     }
-    #sidebar.snap-half { transform: translateY(50vh); }
-    #sidebar.snap-full { transform: translateY(0); }
-    #sidebar.detail-open { transform: translateY(100%); }   /* 詳情面板開啟時整個藏起來 */
-    #sidebar.dragging { transition: none; }
+    #sidebar.open { transform: translateY(0); }
+    #sidebar.detail-open { transform: translateY(100%); }
     body.no-select #sidebar,
     body.no-select { user-select: none; }
 
-    .sheet-drag-handle {
-      display: block;
-      padding: 14px 0 10px;   /* 加大觸控區 */
-      cursor: grab;
-      touch-action: none;
-      flex-shrink: 0;
+    /* 手機側邊欄內部間距 */
+    #sidebar header {
+      padding: 14px 56px 12px 18px;             /* 右邊留 X 按鈕的位置 */
       background: var(--panel);
-      border-top-left-radius: 20px;
-      border-top-right-radius: 20px;
       position: relative;
-      z-index: 2;
     }
-    .sheet-drag-handle::before {
-      content: '';
-      display: block;
-      margin: 0 auto;
-      width: 48px; height: 5px;
-      background: var(--border-strong);
-      border-radius: 3px;
-    }
-    .sheet-drag-handle:active::before { background: var(--muted); }
-    .sheet-drag-handle:active { cursor: grabbing; }
+    #sidebar #controls { padding: 12px 18px; }
+    #sidebar #list-container { -webkit-overflow-scrolling: touch; }
 
-    #sidebar header { padding: 4px 18px 12px; background: var(--panel); }
-    #sidebar #controls { padding: 10px 18px; }
-    #sidebar #list-container { touch-action: pan-y; -webkit-overflow-scrolling: touch; }
+    /* 手機關閉清單的 X 按鈕 */
+    .btn-close-list {
+      display: flex !important;
+      position: absolute; top: 10px; right: 12px;
+      width: 36px; height: 36px; border-radius: 50%;
+      background: var(--panel-alt); border: 1px solid var(--border);
+      color: var(--muted); font-size: 16px; line-height: 1;
+      align-items: center; justify-content: center;
+      cursor: pointer;
+    }
+    .btn-close-list:hover { color: var(--text); }
+
+    /* 清單開關按鈕 (只手機) */
+    .fab-toggle {
+      display: flex !important;
+      position: fixed;
+      bottom: 20px; right: 16px;
+      width: 60px; height: 60px;
+      border-radius: 50%;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      align-items: center; justify-content: center;
+      font-size: 22px;
+      box-shadow: 0 6px 18px rgba(0, 119, 204, 0.35), 0 2px 6px rgba(0, 0, 0, 0.15);
+      cursor: pointer;
+      z-index: 900;
+      transition: transform 0.2s, box-shadow 0.2s, opacity 0.2s;
+    }
+    .fab-toggle:active { transform: scale(0.94); }
+    .fab-toggle .icon-close { display: none; }
+    /* 清單/詳情開啟時 toggle 按鈕淡出 */
+    body.list-open .fab-toggle,
+    body.detail-open .fab-toggle { opacity: 0; pointer-events: none; }
+    /* 詳情開啟時, 返回按鈕淡出避免重疊 */
+    body.detail-open .fab-return { opacity: 0; pointer-events: none; }
+
+    /* 手機返回按鈕 (較緊湊) */
+    .fab-return {
+      top: 12px; left: 12px;
+      padding: 8px 14px 8px 10px;
+      font-size: 13px;
+    }
 
     /* 詳情面板開啟時, 側邊欄整個藏起, 移除地圖底部 padding */
     #map-container.sheet-open { padding-bottom: 0; }
 
     #mobile-toggle, #sidebar-backdrop { display: none; }
 
-    /* 地圖填滿螢幕，底部 96px 讓給 sheet peek */
-    #map-container { padding-bottom: 96px; }
-    #status { top: 12px; right: 12px; left: 12px; max-width: none; font-size: 11px; padding: 6px 10px; }
-    #legend { bottom: 108px; right: 12px; font-size: 10px; padding: 8px 10px; max-width: 150px; }
+    /* 地圖填滿整個螢幕 (按鈕會 overlay 在上面) */
+    #map-container { padding-bottom: 0; }
+    #status { top: 12px; right: 12px; left: auto; max-width: 180px; font-size: 11px; padding: 6px 10px; }
+    #legend { bottom: 96px; right: 12px; font-size: 10px; padding: 8px 10px; max-width: 150px; }
+    /* 手機版隱藏 Leaflet 內建縮放按鈕 (避免擋到返回按鈕) */
+    .leaflet-control-zoom { display: none !important; }
+
+    /* 清單面板內容更緊湊, 讓更多設施能同時顯示 */
+    #sidebar header { padding: 12px 52px 8px 16px; }
+    #sidebar header h1 { font-size: 15px; }
+    #sidebar header .subtitle { font-size: 11px; margin-top: 2px; }
+    #btn-back { font-size: 12px; margin-bottom: 2px; }
+    #sidebar #controls { padding: 8px 14px; }
+    .cat-tabs { padding: 2px; }
+    .cat-tab { padding: 6px 6px; font-size: 12px; min-height: 34px; }
+    .facility { padding: 8px 16px; min-height: 44px; }
+    .facility .fac-num { min-width: 26px; height: 20px; font-size: 11px; }
+    .facility .fac-name { font-size: 13px; }
+    .facility .fac-alt { font-size: 10.5px; margin-top: 1px; }
+    .facility .fac-tags { margin-top: 3px; }
+    .list-section-title { padding: 6px 16px 4px; font-size: 10px; }
+    .region-card { padding: 10px 16px; min-height: 56px; gap: 10px; }
+    .region-name { font-size: 13px; }
+    .region-en { font-size: 10px; }
+    .region-count { font-size: 10px; margin-top: 1px; }
     #legend .legend-icon { width: 20px; height: 20px; }
     #legend .legend-icon svg { width: 12px; height: 12px; }
     /* 面板開啟時把圖例往上推 */
@@ -641,14 +724,16 @@
 </head>
 <body>
 <div id="app">
-  <button id="mobile-toggle" aria-label="Menu">☰</button>
-  <div id="sidebar-backdrop"></div>
+  <button id="btn-return" class="fab-return" aria-label="返回全園總覽">🏰 全園總覽</button>
+  <button id="btn-toggle-list" class="fab-toggle" aria-label="展開清單">
+    <span class="icon-open">📋</span><span class="icon-close">✕</span>
+  </button>
   <aside id="sidebar">
-    <div class="sheet-drag-handle"></div>
     <header>
       <button id="btn-back">← 返回總覽</button>
       <h1 id="title">🏰 東京 DisneySea</h1>
       <div class="subtitle" id="subtitle">全園總覽</div>
+      <button id="btn-close-list" class="btn-close-list" aria-label="關閉清單">✕</button>
     </header>
     <div id="controls">
       <!-- Region view controls -->
@@ -660,12 +745,9 @@
             <div class="cat-tab on" data-cat="dining">🍽️ 餐食<span class="count" id="cnt-dining"></span></div>
           </div>
         </div>
-        <div class="row">
-          <input class="search" id="search" placeholder="搜尋名稱..." />
-        </div>
-        <div class="row" id="chip-row-pass"></div>
-        <div class="row" id="chip-row-tag">
-          <span class="filter-chip" data-filter="tag" data-val="rain">🌧️ 雨天友善</span>
+        <div class="row" id="chip-row-all">
+          <span id="chip-row-pass" class="chip-inline"></span>
+          <span class="filter-chip" data-filter="tag" data-val="rain">🌧️ 雨天</span>
           <span class="filter-chip" data-filter="tag" data-val="thrill">⚠️ 刺激</span>
         </div>
       </div>
@@ -1415,10 +1497,12 @@ function showDetailSheet(item) {
   body.innerHTML = sheetHtml(item);
   sheet.classList.add('show');
   document.getElementById('map-container').classList.add('sheet-open');
+  document.body.classList.add('detail-open');
   STATE.selectedId = item.id;
   // 手機上整個藏起清單面板，避免和詳情面板重疊
   if (isMobileView && isMobileView()) {
     document.getElementById('sidebar').classList.add('detail-open');
+    document.body.classList.remove('list-open');
   }
   // 面板出現後重新計算地圖尺寸並平移到 marker 使其保持可見
   setTimeout(() => {
@@ -1433,7 +1517,7 @@ function hideDetailSheet() {
   const sheet = document.getElementById('detail-sheet');
   sheet.classList.remove('show');
   document.getElementById('map-container').classList.remove('sheet-open');
-  // 手機上把清單面板恢復到 peek
+  document.body.classList.remove('detail-open');
   const sidebar = document.getElementById('sidebar');
   if (sidebar) sidebar.classList.remove('detail-open');
   setTimeout(() => { if (STATE.map) STATE.map.invalidateSize({ animate: false }); }, 300);
@@ -2128,6 +2212,7 @@ async function goToRegion(regionId) {
   STATE.selectedRouteId = null;
   hideDetailSheet();
   updateViewChrome();
+  updateReturnBtn();
   renderList();
   closeSidebar();
   if (location.hash !== '#/region/' + regionId) history.replaceState(null, '', '#/region/' + regionId);
@@ -2139,6 +2224,7 @@ async function goToOverview() {
   STATE.selectedRouteId = null;
   hideDetailSheet();
   updateViewChrome();
+  updateReturnBtn();
   renderList();
   closeSidebar();
   if (location.hash) history.replaceState(null, '', location.pathname + location.search);
@@ -2432,14 +2518,15 @@ function bindEvents() {
     renderList();
   });
 
-  document.getElementById('search').addEventListener('input', e => {
-    STATE.filters.search = e.target.value.trim();
-    refreshLayers();
-    renderList();
-  });
-
   document.getElementById('btn-back').addEventListener('click', () => goToOverview());
   document.getElementById('title').addEventListener('click', () => goToOverview());
+
+  // 浮動按鈕: 返回總覽 (任意頁面點擊都回總覽)
+  document.getElementById('btn-return').addEventListener('click', () => goToOverview());
+  // 浮動按鈕: 開關清單 (手機)
+  document.getElementById('btn-toggle-list').addEventListener('click', () => toggleList());
+  // 清單裡的 X 關閉按鈕
+  document.getElementById('btn-close-list').addEventListener('click', () => toggleList(false));
 
   // 分類 tabs
   document.getElementById('cat-tabs').addEventListener('click', e => {
@@ -2503,85 +2590,25 @@ function applyMode() {
 // ============================================================
 function isMobileView() { return window.matchMedia('(max-width: 768px)').matches; }
 
-function setSheetSnap(name) {
+// 手機底部清單抽屜: 按鈕開關 (無拖曳)
+function toggleList(open) {
   const sidebar = document.getElementById('sidebar');
-  sidebar.style.transform = '';
-  sidebar.classList.remove('snap-half', 'snap-full');
-  if (name === 'half') sidebar.classList.add('snap-half');
-  else if (name === 'full') sidebar.classList.add('snap-full');
-  STATE.sheetSnap = name;
+  const shouldOpen = open === undefined ? !sidebar.classList.contains('open') : open;
+  sidebar.classList.toggle('open', shouldOpen);
+  document.body.classList.toggle('list-open', shouldOpen);
+  STATE.sheetSnap = shouldOpen ? 'open' : 'closed';
+  setTimeout(() => { if (STATE.map) STATE.map.invalidateSize({ animate: false }); }, 300);
+}
+function setSheetSnap(name) { toggleList(name === 'open' || name === 'full' || name === 'half'); }
+function closeSidebar() {
+  if (isMobileView()) toggleList(false);
 }
 
-function initBottomSheet() {
-  const sidebar = document.getElementById('sidebar');
-  const handle = sidebar.querySelector('.sheet-drag-handle');
-  if (!handle) return;
-
-  const snapPositions = () => {
-    const vh = window.innerHeight;
-    return { peek: vh - 96, half: vh * 0.5, full: vh * 0.1 };
-  };
-  const nearest = (currentTop) => {
-    const p = snapPositions();
-    let best = 'peek', bestDist = Infinity;
-    for (const k in p) {
-      const d = Math.abs(p[k] - currentTop);
-      if (d < bestDist) { bestDist = d; best = k; }
-    }
-    return best;
-  };
-
-  let drag = null;
-
-  handle.addEventListener('pointerdown', (e) => {
-    if (!isMobileView()) return;
-    drag = {
-      startY: e.clientY,
-      startTop: sidebar.getBoundingClientRect().top,
-      moved: false,
-      pointerId: e.pointerId
-    };
-    sidebar.classList.add('dragging');
-    document.body.classList.add('no-select');
-    try { handle.setPointerCapture(e.pointerId); } catch {}
-  });
-
-  handle.addEventListener('pointermove', (e) => {
-    if (!drag) return;
-    const dy = e.clientY - drag.startY;
-    if (Math.abs(dy) > 4) drag.moved = true;
-    const vh = window.innerHeight;
-    const newTop = Math.max(vh * 0.1, Math.min(vh - 96, drag.startTop + dy));
-    // 直接用 transform 對應 top
-    sidebar.style.transform = `translateY(${newTop}px)`;
-  });
-
-  const endDrag = (e) => {
-    if (!drag) return;
-    sidebar.classList.remove('dragging');
-    document.body.classList.remove('no-select');
-    const currentTop = sidebar.getBoundingClientRect().top;
-    if (drag.moved) {
-      setSheetSnap(nearest(currentTop));
-    } else {
-      // Tap → 循環
-      const order = ['peek', 'half', 'full'];
-      const idx = order.indexOf(STATE.sheetSnap);
-      setSheetSnap(order[(idx + 1) % order.length]);
-    }
-    drag = null;
-  };
-  handle.addEventListener('pointerup', endDrag);
-  handle.addEventListener('pointercancel', endDrag);
-
-  // 視窗尺寸變化：重設 sheet 位置避免跑掉
-  window.addEventListener('resize', () => {
-    if (isMobileView()) setSheetSnap(STATE.sheetSnap);
-    else { sidebar.style.transform = ''; sidebar.classList.remove('snap-half', 'snap-full'); }
-  });
-
-  // 初始 peek
-  if (isMobileView()) setSheetSnap('peek');
+// 更新返回按鈕顯示 (區域頁顯示, 總覽頁隱藏)
+function updateReturnBtn() {
+  const btn = document.getElementById('btn-return');
+  if (!btn) return;
+  btn.classList.toggle('show', STATE.view !== OVERVIEW_ID);
 }
 
 async function bootstrap() {
@@ -2589,8 +2616,8 @@ async function bootstrap() {
   STATE.mode = 'tourist';        // 觀看版永遠鎖定觀光模式
   renderStaticUi();
   bindEvents();
-  initBottomSheet();
   updateViewChrome();
+  updateReturnBtn();
   renderList();
   // 支援 URL hash 直接跳區域 (例:#/region/mediterranean)
   const hash = location.hash.slice(1);
