@@ -415,6 +415,7 @@
 
   /* ============ 狀態列 & 圖例 ============ */
   #status {
+    display: none !important;               /* 使用者不需要狀態列 */
     position: absolute; top: 12px; right: 12px;
     background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(4px);
     padding: 8px 12px; border-radius: 8px; font-size: 12px;
@@ -435,6 +436,7 @@
   #status .actions button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
 
   #legend {
+    display: none !important;                    /* 使用者不需要圖例, 桌面/手機都隱藏 */
     position: absolute; bottom: 12px; right: 12px;
     background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(4px);
     padding: 10px 12px; border-radius: 8px; font-size: 11px;
@@ -443,6 +445,8 @@
     color: var(--text);
     transition: bottom 0.28s cubic-bezier(0.4, 0, 0.2, 1);
   }
+  /* 目前只有「設施」一個分類, 隱藏分類 tab */
+  .cat-tabs { display: none !important; }
   /* 底部面板開啟時把圖例往上推 */
   #map-container.sheet-open #legend {
     bottom: calc(min(55vh, 480px) + 12px);
