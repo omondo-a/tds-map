@@ -368,6 +368,22 @@
   .marker-pin[data-pass="sp"]  .marker-badge { color: var(--sp); }
   .marker-pin[data-pass="er"]  .marker-badge { color: var(--er); }
 
+  /* ============ 選取狀態: 呼吸/脈動效果 ============ */
+  .marker-selected { z-index: 1000 !important; }
+  .marker-selected .marker-pin {
+    animation: markerPulse 1.6s ease-out infinite;
+    transform: scale(1.15);
+    border-width: 3px;
+  }
+  @keyframes markerPulse {
+    0%   { box-shadow: 0 2px 6px rgba(0,0,0,0.25), 0 0 0 0 rgba(251, 191, 36, 0.75); }
+    70%  { box-shadow: 0 2px 6px rgba(0,0,0,0.25), 0 0 0 22px rgba(251, 191, 36, 0); }
+    100% { box-shadow: 0 2px 6px rgba(0,0,0,0.25), 0 0 0 0 rgba(251, 191, 36, 0); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .marker-selected .marker-pin { animation: none; box-shadow: 0 0 0 4px rgba(251, 191, 36, 0.9); }
+  }
+
   /* 路線繪製中的點 */
   .route-vertex {
     width: 12px; height: 12px; border-radius: 50%;
@@ -1081,7 +1097,7 @@ const EMBEDDED_DATA = /* EMBEDDED_DATA_START */ {
         "id": "r1786094030945",
         "name": "電氣化鐵路",
         "color": "#8e44ad",
-        "points": [[887.4458095707806, 604.5631670895084], [1651.4478874611816, 963.6097660619675]]
+        "points": [[887.4458095707806, 604.5631670895084], [1733.625, 1225.625]]
       }
     ]
   },
@@ -1344,8 +1360,9 @@ function initMap({ url, width, height }) {
   });
   const bounds = [[0, 0], [height, width]];
   L.imageOverlay(url, bounds).addTo(map);
-  map.fitBounds(bounds);
-  map.setMaxBounds([[-height * 0.3, -width * 0.3], [height * 1.3, width * 1.3]]);
+  // 初始視野: 靠齊左下角 (大門口), 放大到看不見外部底色
+  map.fitBounds([[0, 0], [height * 0.55, width * 0.6]]);
+  map.setMaxBounds([[-height * 0.1, -width * 0.1], [height * 1.1, width * 1.1]]);
   STATE.map = map;
   STATE.imageBounds = bounds;
   STATE.layer = L.layerGroup().addTo(map);
@@ -1436,14 +1453,30 @@ function showDetailSheet(item) {
     document.getElementById('sidebar').classList.add('detail-open');
     document.body.classList.remove('list-open');
   }
-  // 面板出現後重新計算地圖尺寸並平移到 marker 使其保持可見
-  setTimeout(() => {
-    if (!STATE.map) return;
-    STATE.map.invalidateSize({ animate: false });
-    const c = getCoords(STATE.view)[item.id];
-    if (c) STATE.map.panTo(c, { animate: true });
-  }, 300);
+  // 標記選取的 marker (呼吸效果), 不平移地圖避免跳位
+  highlightMarker(item.id);
+  setTimeout(() => { if (STATE.map) STATE.map.invalidateSize({ animate: false }); }, 300);
   hydrateSheet(item);
+}
+
+// 給選取的 marker 加上 selected class, 清除其他的
+function highlightMarker(id) {
+  if (!STATE.layer) return;
+  STATE.layer.eachLayer(l => {
+    if (!(l instanceof L.Marker)) return;
+    const el = l.getElement();
+    if (!el) return;
+    if (l._itemId === id) el.classList.add('marker-selected');
+    else el.classList.remove('marker-selected');
+  });
+}
+function clearMarkerHighlight() {
+  if (!STATE.layer) return;
+  STATE.layer.eachLayer(l => {
+    if (!(l instanceof L.Marker)) return;
+    const el = l.getElement();
+    if (el) el.classList.remove('marker-selected');
+  });
 }
 function hideDetailSheet() {
   const sheet = document.getElementById('detail-sheet');
@@ -1452,6 +1485,7 @@ function hideDetailSheet() {
   document.body.classList.remove('detail-open');
   const sidebar = document.getElementById('sidebar');
   if (sidebar) sidebar.classList.remove('detail-open');
+  clearMarkerHighlight();
   setTimeout(() => { if (STATE.map) STATE.map.invalidateSize({ animate: false }); }, 300);
 }
 
@@ -1607,10 +1641,10 @@ function refreshLayers() {
     FACILITIES.forEach(f => {
       if (!c[f.id]) return;
       const m = L.marker(c[f.id], { icon: itemIcon(f), riseOnHover: true });
-      m.on('click', async (ev) => {
+      m._itemId = f.id;
+      m.on('click', (ev) => {
         L.DomEvent.stopPropagation(ev);
         STATE.selectedId = f.id;
-        // 直接彈出詳情面板 (不再導航到區域)
         showDetailSheet(f);
       });
       if (STATE.editMode === 'facility') {
